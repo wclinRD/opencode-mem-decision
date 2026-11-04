@@ -14,7 +14,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
    - Remote API backend
 
 2. **Auto-Capture**
-   - `session.idle` hook
+   - `session.status` event (`status.type === "idle"`)
    - AI provider 提取技術決策
    - Credential redaction
    - Smart deduplication
@@ -131,7 +131,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 
 1. 建立 plugin skeleton (`src/plugin.ts`)
 2. 實作 local storage backend (libSQL/Turso)
-3. 實作 Auto-Capture hook (`session.idle`)
+3. 實作 Auto-Capture 狀態觸發：`session.status` 監聽 `status.type === "idle"`
 4. 實作 Memory Injection hooks (`session.created`, `session.updated`)
 5. 實作 memory custom tools (`add`, `search`, `list`)
 
@@ -164,7 +164,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 
 ### Integration Tests
 
-- Auto-capture trigger on `session.idle`
+- Auto-capture trigger on `session.status` (`status.type === "idle"`)
 - Memory injection on `session.created`
 - Manual tool calls (`add`, `search`, `list`)
 - Web UI REST API endpoints
@@ -180,7 +180,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 
 ### 已完成 (Implemented)
 
-1. **Plugin skeleton**：`src/plugin.js` 載入 config，註冊 `session.created`, `session.idle`, `experimental.session.compacting` hooks。
+1. **Plugin skeleton**：`src/plugin.js` 載入 config，註冊 `session.created`, `session.status`, `experimental.session.compacting` 狀態與壓縮 hook。
 2. **Basic tools**：`memory` (add/search/list/profile/forget/export/import/migrate/list-shards/dream/restore-trash) 與 `knowledge` (list/show/save/delete)。
 3. **Basic storage**：JSON file based storage (`memories.db.json`, `knowledge.db.json`, `trash.db.json`)。
 4. **Web server scaffolding**：`src/server.js` with `GET /api/memory`, `GET /api/knowledge`, `GET /api/stats`, basic auth pattern.
@@ -238,9 +238,11 @@ cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definiti
    - 15 個 mode 全部保留（add/search/list/profile/forget/migrate/export/import/list-shards/dream/restore-trash/knowledge-*）。
 3. `index.js`：只保留 `export { default } from "./src/plugin.js"`，移除失效的 named `plugin` export。
 4. `src/server.js`：web server 啟動條件改為 `webServerHost` 非空即啟動（預設 `127.0.0.1`），預設 port 改為 `56789`；加上 `error` handler，port 被占用時只記 log，不讓 host process crash；根路徑 `/` 與 `/index.html` 返回 `src/static/ui.html`。`setup` 回傳的 cleanup 會 `server.close()` 並 abort event subscription。
-5. `session.idle` 接上 auto-capture：`ctx.event.subscribe({ types: ["session.idle"], signal })` → `ctx.session.context({ sessionID })` → `autoCapture({ sessionData, memoryConfig, storage })`。
+5. `session.status` 接上 auto-capture：`ctx.event.subscribe({ types: ["session.status"], signal })` → `ctx.session.context({ sessionID })` → `autoCapture({ sessionData, memoryConfig, storage })`，只處理 `status.type === "idle"`。
 6. `tests/plugin.test.js` 改測 V2 形狀：`plugin.id`、`plugin.setup`、tool 註冊、JSON Schema、`execute` 回傳 `{ content }`、web server 啟動。`npm test` 23/23 pass。
 7. `src/storage/local.js`（`~` 展開）與 `src/config.js`（deep merge）是本次工作前既有的未提交修改，保留不動。
+
+注意：`session.idle` 在 V2 已被標為 deprecated，且事件流中不會可靠發出。因此 auto-capture 改訂閱 `session.status`，並只當 `status.type === "idle"` 時才觸發。
 
 ### 驗證（2026-11-04，實機）
 

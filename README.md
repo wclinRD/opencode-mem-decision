@@ -67,7 +67,7 @@ Example memory:
 | Credential / sensitive redaction | ✅ Implemented | Applied on write; sensitive items excluded from recall |
 | Memory classification & confidence | ✅ Implemented | Auto-classifies as fact/preference/rule/lesson/system |
 | Web server + Basic Auth | ✅ Implemented | Defaults to `127.0.0.1:4747` |
-| Auto-capture on `session.idle` | ⚠️ Partial | Captures whole session text as one memory; logs events and summaries |
+| Auto-capture on session idle | ⚠️ Partial | Captures whole session text as one memory when `session.status.type === "idle"`; logs events and summaries |
 | Deduplication | ⚠️ Partial | Word-set Jaccard similarity, not embeddings |
 | Knowledge base | ✅ Implemented | Separate JSON file |
 | Dreaming / consolidation | ⚠️ Partial | Works when enabled; trash uses the storage directory |
@@ -94,7 +94,7 @@ prompt hook (ctx.session.hook("prompt"))
      ▼
 event.prompt.text += "\n\n<!-- opencode-mem-decision:injected -->\n..."   (once per session by default)
 
-session.idle
+session.status (status.type === "idle")
      │
      ▼
 autoCapture()
@@ -120,7 +120,7 @@ export default Plugin.define({
   async setup(ctx) {
     // register the `memory` tool
     // register the prompt hook for injection
-    // subscribe to session.idle
+    // subscribe to session.status for idle state
     // start the optional HTTP server
   },
 });
@@ -373,7 +373,7 @@ When a session becomes idle:
 Limitations:
 
 - The whole session is stored as **one** memory. There is no AI extraction of individual decisions yet.
-- Only `session.idle` triggers capture. Child-session filtering is not implemented.
+- Only `session.status.type === "idle"` triggers capture. Child-session filtering is not implemented.
 - Auto-capture is disabled when `chatMessage.enabled` is `false`.
 - Sensitive memories are excluded from automatic recall to reduce leak risk.
 

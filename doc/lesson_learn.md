@@ -60,7 +60,7 @@ export default Plugin.define({
 });
 ```
 
-- 舊 hook 對應：`session.idle` → `ctx.event.subscribe({ types: ["session.idle"] })`；`experimental.session.compacting` → `ctx.session.hook("compaction", ...)`。
+- 舊 hook 對應：`session.status` → `ctx.event.subscribe({ types: ["session.status"] })`，只處理 `status.type === "idle"`；`experimental.session.compacting` → `ctx.session.hook("compaction", ...)`。
 - plugin options 從 `ctx.options` 讀，不是第二個參數。
 - `setup` 可回傳 cleanup function，用來關閉 server、abort subscription。
 

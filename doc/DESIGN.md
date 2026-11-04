@@ -19,7 +19,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 
 | 項目 | 狀態 | 說明 |
 | --- | --- | --- |
-| hook: `session.idle` | ✅ Implemented | plugin skeleton 註冊 hook |
+| event: `session.status` (status.type === "idle") | ✅ Implemented | auto-capture subscribes to session.status |
 | AI provider 提取技術決策 | 🔲 To Implement | provider 需支援 structured/tool-call output |
 | credential redaction | ✅ Implemented | 移除 GitHub token、OpenAI key、AWS key、Slack token、GCP key、PEM private key |
 | smart deduplication | ✅ Implemented | simHash + Jaccard similarity |

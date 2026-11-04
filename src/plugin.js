@@ -181,17 +181,20 @@ export default Plugin.define({
       cleanups.push(() => registration?.dispose?.());
     }
 
-    // Auto-capture runs on idle sessions.
+    // Auto-capture runs when a session becomes idle. Use V2 `session.status` event
+    // (with `status.type === "idle"`) instead of the deprecated `session.idle`.
     if (ctx.event?.subscribe && ctx.session?.context) {
       const controller = new AbortController();
       cleanups.push(() => controller.abort());
       void (async () => {
         try {
           for await (const event of ctx.event.subscribe({
-            types: ["session.idle"],
+            types: ["session.status"],
             signal: controller.signal,
           })) {
-            if (event?.type !== "session.idle") continue;
+            if (event?.type !== "session.status") continue;
+            const status = event.data?.status;
+            if (status?.type !== "idle") continue;
             const sessionID = event.data?.sessionID;
             if (!sessionID) continue;
             const messages = await ctx.session.context({ sessionID });
