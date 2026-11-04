@@ -31,10 +31,12 @@ OpenCode sessions forget everything when they end. This plugin gives the agent a
 ## What it does
 
 - **Remembers across sessions.** Store project facts, architectural decisions, user preferences, and debugging notes, then read them back in a later session.
-- **Captures automatically.** When a session goes idle, the plugin can save a redacted summary of the conversation as a memory.
-- **Deduplicates.** Similar memories are detected with a word-set similarity score so the store does not fill with repeats.
-- **Redacts credentials.** GitHub tokens, OpenAI keys, AWS keys, Slack tokens, GCP keys, and PEM private keys are replaced before anything is written to disk.
+- **Captures automatically.** When a session goes idle, the plugin saves the conversation as a memory, classifies it, and logs events for traceability.
+- **Deduplicates and classifies.** Similar memories are detected with a word-set similarity score; new memories are tagged by type (`fact`, `preference`, `rule`, `lesson`, `system`) and confidence.
+- **Redacts credentials and sensitive content.** GitHub tokens, OpenAI keys, AWS keys, Slack tokens, GCP keys, PEM private keys, emails, and phone numbers are replaced before writing. Sensitive items are excluded from automatic recall.
 - **Exposes a memory tool.** The agent can add, list, search, export, import, and delete memories, and manage a separate knowledge base.
+- **Searches with filters.** Keyword search supports `scope`, `type`, `confidence`, and `timeRange` filters.
+- **Injects dynamically.** Memory injection adapts chunk size and count to the current context window pressure, and adds explicit precedence rules when recalling memories.
 - **Serves a local HTTP API.** Read memories, knowledge, and stats over HTTP, optionally protected by Basic Auth.
 
 Example memory:
@@ -44,6 +46,11 @@ Example memory:
   "id": "mem_1793763404758_bzth932",
   "content": "The API uses Fastify, not Express. Auth is handled by a preHandler hook in src/auth.ts.",
   "scope": "project",
+  "type": "fact",
+  "confidence": 0.8,
+  "sensitivity": "normal",
+  "priority": 1,
+  "tags": [],
   "createdAt": "2026-11-04T03:36:44.758Z",
   "updatedAt": "2026-11-04T03:36:44.758Z"
 }
@@ -57,15 +64,17 @@ Example memory:
 |---|---|---|
 | `memory` tool | ✅ Implemented | All modes are callable (see [Usage](#usage)) |
 | JSON storage | ✅ Implemented | `~/.opencode-memory/*.db.json` |
-| Credential redaction | ✅ Implemented | Applied on write |
+| Credential / sensitive redaction | ✅ Implemented | Applied on write; sensitive items excluded from recall |
+| Memory classification & confidence | ✅ Implemented | Auto-classifies as fact/preference/rule/lesson/system |
 | Web server + Basic Auth | ✅ Implemented | Defaults to `127.0.0.1:4747` |
-| Auto-capture on `session.idle` | ⚠️ Partial | Captures whole session text as one memory; no AI extraction |
+| Auto-capture on `session.idle` | ⚠️ Partial | Captures whole session text as one memory; logs events and summaries |
 | Deduplication | ⚠️ Partial | Word-set Jaccard similarity, not embeddings |
 | Knowledge base | ✅ Implemented | Separate JSON file |
 | Dreaming / consolidation | ⚠️ Partial | Works when enabled; trash uses the storage directory |
-| Memory injection into prompts | ✅ Implemented | `ctx.session.hook("prompt", ...)`; once per session by default |
-| Keyword search | ✅ Implemented | Unicode token match, ranked by query-token hits |
+| Memory injection into prompts | ✅ Implemented | Dynamic injection budget, precedence rules |
+| Keyword search with filters | ✅ Implemented | Supports scope, type, confidence, timeRange |
 | Semantic search / embeddings | 🔲 Planned | Keyword matching only |
+| Event logging | ✅ Implemented | Append-only events.log.json with summaries |
 | User profile | ✅ Implemented | Built from memories, rebuilt every N prompts |
 | Web UI | 🔲 Planned | HTTP API only |
 | Markdown Vault backend | 🔲 Planned | — |
@@ -78,7 +87,10 @@ Example memory:
 ```
 prompt hook (ctx.session.hook("prompt"))
      │  count prompt (profile)
-     │  recall relevant / recent memories
+     │  calculate context fill ratio
+     │  recall relevant / recent memories, filter by type/confidence/time
+     │  dynamic budget decides max chunks and char length per chunk
+     │  append `=== Memory Context ===` block with precedence rules
      ▼
 event.prompt.text += "\n\n<!-- opencode-mem-decision:injected -->\n..."   (once per session by default)
 
@@ -86,8 +98,10 @@ session.idle
      │
      ▼
 autoCapture()
-     │  strip injected blocks, redact credentials
+     │  strip injected blocks, redact credentials and sensitive data
+     │  classify content by type and confidence
      │  compare with existing memories (Jaccard similarity)
+     │  log event to events.log.json, generate summary when threshold met
      ▼
 ~/.opencode-memory/memories.db.json
      │
@@ -259,11 +273,14 @@ Full example:
 | `chatMessage.maxMemories` | `3` | Maximum memories appended to one prompt. |
 | `chatMessage.excludeCurrentSession` | `true` | Do not inject memories captured in the same session. |
 | `chatMessage.filterInjectedPrompts` | `true` | Drop memories that look like system prompts. |
+| `chatMessage.contextWindowSize` | `128000` | Context window size estimate; dynamic injection adjusts chunk size and count based on fill ratio. |
 | `userProfileAnalysisInterval` | `10` | Rebuild `profile.json` every N prompts. |
 | `updateOnCaptureEnabled` | `false` | When a captured session is similar to an existing memory, update that memory instead of skipping. |
 | `updateOnCaptureSimilarityThreshold` | `0.75` | Similarity threshold (`0`–`1`) for deduplication and update. |
 | `dreaming.enabled` | `false` | Enables the `dream` tool mode and `POST /api/dream`. |
 | `dreaming.relatedThreshold` | `0.75` | Similarity threshold used by dream consolidation. |
+| `eventLog.enabled` | `true` | Write events.log.json for capture/decisions. |
+| `eventLog.summaryHours` | `24` | Summarize recent events if more than 3 events within this window. |
 | `webServerHost` | `127.0.0.1` | HTTP server bind address. Set to `""` to disable the server. |
 | `webServerPort` | `4747` | HTTP server port. A busy port is shared or assumed to be another instance; OpenCode does not crash. |
 | `webServerAuthUsername` | `""` | Basic Auth username. Auth is enforced only when **both** username and password are set. |
@@ -287,8 +304,8 @@ The plugin registers one tool, `memory`. Select the operation with `mode`.
 
 | Mode | Arguments | Result |
 |---|---|---|
-| `add` | `content`, `scope?` | Creates a memory. Scope defaults to `project`. Credentials are redacted. |
-| `search` | `query?`, `scope?` | Keyword search: matches Unicode tokens, ranked by query-token hits, newest first on ties. Empty query returns all in scope. |
+| `add` | `content`, `scope?` | Creates a memory. Scope defaults to `project`. The plugin auto-classifies the content and stores `type`, `confidence`, `sensitivity`, `priority`, and `tags`. Credentials and sensitive content are redacted. |
+| `search` | `query?`, `scope?`, `type?`, `confidence?`, `timeRange?` | Keyword search with optional filters: `type` (fact/preference/rule/lesson/system), `confidence` numeric threshold, `timeRange` in milliseconds. Empty query returns the latest scoped memories up to 50. |
 | `list` | `limit?`, `scope?` | Newest first. Default limit `50`. |
 | `profile` | — | Builds and persists the user profile: totals, scopes, preferences, recent memories, top keywords, knowledge titles. |
 | `forget` | `id` | Deletes one memory. Returns `true` or `false`. |
@@ -319,6 +336,9 @@ memory({ mode: "add", content: "Deploys use Fly.io. Staging app: acme-staging.",
 // User preference
 memory({ mode: "add", content: "User prefers Traditional Chinese replies and terse output.", scope: "user" });
 
+// Search with filters
+memory({ mode: "search", query: "auth", type: "lesson", confidence: 0.5, timeRange: 86400000 });
+
 // Read back
 memory({ mode: "list", limit: 10 });
 memory({ mode: "search", scope: "project" });
@@ -341,18 +361,21 @@ memory({ mode: "knowledge-show", id: "kb_architecture" });
 When a session becomes idle:
 
 1. The plugin reads the session messages and concatenates their text.
-2. Credentials are redacted.
-3. The text is compared with existing memories using word-set Jaccard similarity.
-4. If similar to an existing memory:
+2. Credentials and sensitive content are redacted.
+3. The text is classified by type and confidence.
+4. The text is compared with existing memories using word-set Jaccard similarity.
+5. If similar to an existing memory:
    - `updateOnCaptureEnabled: true` → update that memory.
    - `updateOnCaptureEnabled: false` → skip.
-5. Otherwise a new `project` memory is added.
+6. Otherwise a new `project` memory is added with its classification metadata.
+7. An event is logged to `events.log.json`; if more than three events fall within `eventLog.summaryHours`, a summary memory is created.
 
 Limitations:
 
 - The whole session is stored as **one** memory. There is no AI extraction of individual decisions yet.
 - Only `session.idle` triggers capture. Child-session filtering is not implemented.
 - Auto-capture is disabled when `chatMessage.enabled` is `false`.
+- Sensitive memories are excluded from automatic recall to reduce leak risk.
 
 ### Dreaming
 

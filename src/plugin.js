@@ -3,8 +3,10 @@ import { loadConfig } from "./config.js";
 import { autoCapture } from "./capture.js";
 import { runDreaming } from "./dreaming.js";
 import { createWebServer, releaseWebServer } from "./server.js";
-import { injectMemories, formatInjectedPrompt, stripInjectedBlock, INJECTION_MARKER } from "./inject.js";
+import { injectMemories, formatInjectedPrompt, stripInjectedBlock, INJECTION_MARKER, calculateFillRatio } from "./inject.js";
 import { buildProfile, recordPrompt } from "./profile.js";
+import { logEvent, summarizeRecentEvents } from "./eventLog.js";
+import { classifyMemory } from "./classify.js";
 
 // Sessions that already received the one-shot injection. Module level because
 // the hook registration lives for the whole process.
@@ -77,7 +79,14 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
     throw new Error(`Unknown knowledge mode: ${km}`);
   }
 
-  if (mode === "add") return storage.addMemory(args.content, args.scope || "project");
+  if (mode === "add") {
+    const classified = classifyMemory(args.content);
+    return storage.addMemory(args.content, args.scope || "project", null, {
+      type: classified.type,
+      confidence: classified.confidence,
+      sensitive: classified.sensitive,
+    });
+  }
   if (mode === "search") return storage.searchMemories(args.query, args.scope || "default");
   if (mode === "list") return storage.listMemories(args.limit || 50, args.scope || "default");
   if (mode === "profile") return buildProfile({ storage, memoryConfig });
@@ -160,8 +169,10 @@ export default Plugin.define({
           sessionData: { id: sessionID, latestMessage: event.prompt.text },
           memoryConfig,
           storage: localStorage,
+          contextWindowSize: memoryConfig.chatMessage?.contextWindowSize || 128000,
         });
-        const block = formatInjectedPrompt(memories);
+        const fillRatio = calculateFillRatio(event.prompt.text, memoryConfig.chatMessage?.contextWindowSize || 128000);
+        const block = formatInjectedPrompt(memories, fillRatio);
         if (!block) return;
 
         event.prompt.text = `${event.prompt.text}\n\n${INJECTION_MARKER}\n${block}`;
@@ -186,10 +197,20 @@ export default Plugin.define({
             const messages = await ctx.session.context({ sessionID });
             const text = sessionText(messages);
             if (!text) continue;
+
+            const classified = classifyMemory(text);
+            await logEvent({
+              sessionID,
+              actor: "system",
+              event_type: "auto-capture",
+              description: `Auto-captured session of length ${text.length} with type ${classified.type}`,
+            });
+
             await autoCapture({
               sessionData: { id: sessionID, messages: [{ content: text }] },
               memoryConfig,
               storage: localStorage,
+              classifyMemory: () => classified,
             });
           }
         } catch (error) {

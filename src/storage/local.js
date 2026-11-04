@@ -35,7 +35,7 @@ async function writeJsonFile(filePath, data) {
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-export async function addMemory(content, scope = "project", sessionId) {
+export async function addMemory(content, scope = "project", sessionId, metadata = {}) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   await ensureDir(path.dirname(filePath));
   const db = await readJsonFile(filePath);
@@ -44,6 +44,11 @@ export async function addMemory(content, scope = "project", sessionId) {
     id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     content: redactCredentials(content),
     scope,
+    type: metadata.type || "fact",
+    confidence: Number.isFinite(metadata.confidence) ? metadata.confidence : 0.5,
+    sensitivity: metadata.sensitive === true ? "sensitive" : "normal",
+    priority: Number.isFinite(metadata.priority) ? metadata.priority : 1,
+    tags: metadata.tags || [],
     ...(sessionId ? { sessionId } : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -58,15 +63,32 @@ function tokenize(text) {
   return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
 }
 
-export async function searchMemories(query, scope = "default") {
+export async function searchMemories(query, filters = {}) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
-  const scoped = db.memories.filter((m) => scope === "default" || m.scope === scope);
-  const queryTokens = [...new Set(tokenize(query))];
+  const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
+  const typeFilter = filters.type;
+  const confidenceFilter = filters.confidence;
+  const timeRange = filters.timeRange;
+
+  let scoped = db.memories.filter((m) => effectiveScope === "default" || m.scope === effectiveScope);
+
+  if (typeFilter) scoped = scoped.filter((m) => m.type === typeFilter);
+  if (confidenceFilter && typeof confidenceFilter === "number") {
+    scoped = scoped.filter((m) => Number(m.confidence) >= confidenceFilter);
+  }
+  if (timeRange) {
+    const cutoff = new Date(Date.now() - timeRange).toISOString();
+    scoped = scoped.filter((m) => m.createdAt >= cutoff);
+  }
+
+  const queryTokens = query ? [...new Set(tokenize(query))] : [];
 
   if (!queryTokens.length) {
-    return scoped.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return scoped
+      .sort((a, b) => Number(b.priority) - Number(a.priority) || new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 50);
   }
 
   return scoped

@@ -293,6 +293,7 @@
     <div class="tabs" id="viewTabs">
       <button class="tab active" data-view="memories">Memories</button>
       <button class="tab" data-view="knowledge">Knowledge</button>
+      <button class="tab" data-view="events">Event Summaries</button>
     </div>
 
     <div id="memoriesView">
@@ -315,6 +316,27 @@
         <select id="scopeFilter">
           <option value="all">All scopes</option>
         </select>
+        <select id="typeFilter">
+          <option value="all">All types</option>
+          <option value="fact">Fact</option>
+          <option value="preference">Preference</option>
+          <option value="rule">Rule</option>
+          <option value="lesson">Lesson</option>
+          <option value="system">System</option>
+        </select>
+        <select id="confidenceFilter">
+          <option value="all">All confidence</option>
+          <option value="0.5">≥ 0.5</option>
+          <option value="0.7">≥ 0.7</option>
+          <option value="0.9">≥ 0.9</option>
+        </select>
+        <select id="timeRangeFilter">
+          <option value="all">Any time</option>
+          <option value="3600000">Last hour</option>
+          <option value="86400000">Last day</option>
+          <option value="604800000">Last week</option>
+          <option value="2592000000">Last month</option>
+        </select>
         <select id="sortSelect">
           <option value="desc">Newest first</option>
           <option value="asc">Oldest first</option>
@@ -329,6 +351,11 @@
     <div id="knowledgeView" style="display: none;">
       <h2 class="section-title">Knowledge</h2>
       <div id="knowledgeList" class="grid"></div>
+    </div>
+
+    <div id="eventsView" style="display: none;">
+      <h2 class="section-title">Event Summaries</h2>
+      <div id="eventSummaries" class="grid"></div>
     </div>
   </main>
 
@@ -396,9 +423,19 @@
         if (!filter) populateScopeFilter(data);
         const query = (filter || document.getElementById("searchInput").value).trim();
         const scopeFilter = document.getElementById("scopeFilter").value;
+        const typeFilter = document.getElementById("typeFilter").value;
+        const confidenceFilter = document.getElementById("confidenceFilter").value;
+        const timeRangeFilter = document.getElementById("timeRangeFilter").value;
         const sortSelect = document.getElementById("sortSelect").value;
-        if (query || scopeFilter !== "all") {
-          data = await request("/memory/search?query=" + encodeURIComponent(query) + "&scope=" + encodeURIComponent(scopeFilter === "all" ? "default" : scopeFilter));
+        if (query || scopeFilter !== "all" || typeFilter !== "all" || confidenceFilter !== "all" || timeRangeFilter !== "all") {
+          const params = new URLSearchParams({
+            query,
+            scope: scopeFilter === "all" ? "default" : scopeFilter,
+          });
+          if (typeFilter !== "all") params.set("type", typeFilter);
+          if (confidenceFilter !== "all") params.set("confidence", confidenceFilter);
+          if (timeRangeFilter !== "all") params.set("timeRange", timeRangeFilter);
+          data = await request("/memory/search?" + params.toString());
         }
         data.sort((a, b) => {
           const order = sortSelect === "asc" ? 1 : -1;
@@ -416,6 +453,9 @@
             <pre>${escapeHtml(m.content)}</pre>
             <div class="meta">
               <span class="pill">${escapeHtml(m.scope || "default")}</span>
+              <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
+              <span class="pill" data-conf="${escapeHtml(m.confidence || 0.5)}">${Number(m.confidence || 0.5).toFixed(2)}</span>
+              <span class="pill" data-sens="${escapeHtml(m.sensitivity || 'normal')}">${escapeHtml(m.sensitivity || "normal")}</span>
               <span>created: ${escapeHtml(m.createdAt)}</span>
               <span>updated: ${escapeHtml(m.updatedAt)}</span>
             </div>
@@ -499,6 +539,7 @@
     const knowledgeView = document.getElementById('knowledgeView');
     let activeView = 'memories';
     let knowledgeLoaded = false;
+    let eventsLoaded = false;
 
     function switchView(view) {
       if (activeView === view) return;
@@ -509,13 +550,23 @@
       if (view === 'memories') {
         memoriesView.style.display = 'block';
         knowledgeView.style.display = 'none';
+        eventsView.style.display = 'none';
         loadMemories();
-      } else {
+      } else if (view === 'knowledge') {
         memoriesView.style.display = 'none';
         knowledgeView.style.display = 'block';
+        eventsView.style.display = 'none';
         if (!knowledgeLoaded) {
           loadKnowledge();
           knowledgeLoaded = true;
+        }
+      } else if (view === 'events') {
+        memoriesView.style.display = 'none';
+        knowledgeView.style.display = 'none';
+        eventsView.style.display = 'block';
+        if (!eventsLoaded) {
+          loadEventsSummary();
+          eventsLoaded = true;
         }
       }
     }
@@ -567,6 +618,32 @@
       toast("Knowledge deleted.", "success");
       await loadKnowledge();
       await loadStats();
+    }
+
+    async function loadEventsSummary() {
+      const list = document.getElementById("eventSummaries");
+      list.innerHTML = "";
+      try {
+        const summary = await request("/events/summary?hours=24");
+        if (!summary || !summary.summary) {
+          list.innerHTML = `<div class="empty">No recent event summaries found.</div>`;
+          return;
+        }
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <h3>Session Summary</h3>
+          <pre>${escapeHtml(summary.summary)}</pre>
+          <div class="meta">
+            <span class="pill">related memories</span>
+            <span>${escapeHtml((summary.related_memory_ids || []).join(", ") || "none")}</span>
+          </div>
+        `;
+        list.appendChild(card);
+      } catch (e) {
+        list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
+        toast("Error: " + e.message, "error");
+      }
     }
 
     (async () => {

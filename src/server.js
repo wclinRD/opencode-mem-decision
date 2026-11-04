@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { localStorage } from "./storage/local.js";
 import { buildProfile } from "./profile.js";
 import { runDreaming } from "./dreaming.js";
+import { summarizeRecentEvents } from "./eventLog.js";
 
 const UI_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "static", "ui.html");
 
@@ -84,7 +85,17 @@ export function createWebServer({ memoryConfig, storage }) {
       } else if (path === "/api/memory/search" && method === "GET") {
         const query = url.searchParams.get("query") || "";
         const scope = url.searchParams.get("scope") || "default";
-        sendJson(res, 200, await storage.searchMemories(query, scope));
+        const type = url.searchParams.get("type") || "all";
+        const confidence = url.searchParams.get("confidence");
+        const timeRange = url.searchParams.get("timeRange");
+        const filters = { scope };
+        if (type !== "all") filters.type = type;
+        if (confidence) filters.confidence = Number(confidence);
+        if (timeRange) filters.timeRange = Number(timeRange);
+        sendJson(res, 200, await storage.searchMemories(query, filters));
+      } else if (path === "/api/events/summary" && method === "GET") {
+        const hours = url.searchParams.get("hours") || 24;
+        sendJson(res, 200, await summarizeRecentEvents({ hours: Number(hours) }));
       } else if (path.match(/^\/api\/memory\/[^/]+$/) && method === "GET") {
         const id = path.split("/").pop();
         sendJson(res, 200, await storage.getMemory(id));

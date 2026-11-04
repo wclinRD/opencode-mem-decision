@@ -13,6 +13,7 @@ const DEFAULT_CONFIG = {
     maxAgeDays: null,
     filterInjectedPrompts: true,
     captureChildSessions: false,
+    contextWindowSize: 128000,
   },
   updateOnCaptureEnabled: false,
   updateOnCaptureSimilarityThreshold: 0.75,
@@ -23,6 +24,10 @@ const DEFAULT_CONFIG = {
     relatedThreshold: 0.75,
     crossProject: false,
     trashRetentionDays: 30,
+  },
+  eventLog: {
+    enabled: true,
+    summaryHours: 24,
   },
   embeddingModel: "Xenova/nomic-embed-text-v1",
   embeddingApiUrl: "",
