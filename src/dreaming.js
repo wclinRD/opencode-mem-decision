@@ -1,11 +1,12 @@
 import fs from "fs/promises";
 import path from "path";
-import { listMemories, updateMemory, deleteMemory, addMemory, getStorageDir } from "./storage/local.js";
+import { listMemories, updateMemory, softDeleteMemory, addMemory, getStorageDir, cleanupTrash } from "./storage/local.js";
 import { calculateSimilarity } from "./capture.js";
 import { redactCredentials } from "./security.js";
 import { loadConfig } from "./config.js";
 
 const TRASH_FILE = "trash.db.json";
+const DEFAULT_TRASH_RETENTION_DAYS = 90;
 
 function trashPath() {
   return path.join(getStorageDir(), TRASH_FILE);
@@ -64,13 +65,17 @@ export async function runDreaming({ memoryConfig, storage }) {
     }
   }
 
+  const retentionDays = memoryConfig.dreaming?.trashRetentionDays || DEFAULT_TRASH_RETENTION_DAYS;
+  await cleanupTrash(retentionDays);
+
   await writeTrash(trash.entries);
   return { action: "dreamed", count: actions.length, actions };
 }
 
 async function moveToTrash(id, content, entries) {
-  entries.push({ id, content: redactCredentials(content), addedAt: new Date().toISOString() });
-  await deleteMemory(id);
+  const memory = { id, content: redactCredentials(content) };
+  entries.push({ ...memory, addedAt: new Date().toISOString(), deletedAt: new Date().toISOString() });
+  await softDeleteMemory(id);
 }
 
 export async function restoreTrashEntry(id) {

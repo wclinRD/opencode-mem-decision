@@ -6,6 +6,7 @@ import { redactCredentials } from "../security.js";
 const HOME_DIR = process.env.HOME || os.homedir() || "~";
 const MEMORIES_FILE = "memories.db.json";
 const KNOWLEDGE_FILE = "knowledge.db.json";
+const TRASH_FILE = "trash.db.json";
 
 export function getStorageDir() {
   const override = process.env.OPENCODE_MEM_DIR;
@@ -191,6 +192,45 @@ export async function deleteMemory(id) {
   return false;
 }
 
+export async function softDeleteMemory(id) {
+  const memory = await getMemory(id);
+  if (!memory) return false;
+
+  const trashFilePath = path.join(getStorageDir(), TRASH_FILE);
+  let trashData = { entries: [] };
+  try {
+    const data = await fs.readFile(trashFilePath, "utf-8");
+    trashData = JSON.parse(data);
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
+
+  trashData.entries.push({ id, content: memory.content, addedAt: new Date().toISOString(), deletedAt: new Date().toISOString() });
+  await fs.mkdir(path.dirname(trashFilePath), { recursive: true });
+  await fs.writeFile(trashFilePath, JSON.stringify(trashData, null, 2), "utf-8");
+
+  return deleteMemory(id);
+}
+
+export async function cleanupTrash(retentionDays = 90) {
+  const trashFilePath = path.join(getStorageDir(), TRASH_FILE);
+  let trashData = { entries: [] };
+  try {
+    const data = await fs.readFile(trashFilePath, "utf-8");
+    trashData = JSON.parse(data);
+  } catch (e) {
+    if (e.code === "ENOENT") return { deletedCount: 0, removedEntries: [] };
+    throw e;
+  }
+
+  const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString();
+  const removedEntries = trashData.entries.filter((e) => e.deletedAt && e.deletedAt < cutoff);
+  trashData.entries = trashData.entries.filter((e) => !e.deletedAt || e.deletedAt >= cutoff);
+
+  await fs.writeFile(trashFilePath, JSON.stringify(trashData, null, 2), "utf-8");
+  return { deletedCount: removedEntries.length, removedEntries };
+}
+
 export async function deleteMemories(query, scope = "default") {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -326,6 +366,7 @@ export const localStorage = {
   listMemories,
   getMemory,
   deleteMemory,
+  softDeleteMemory,
   deleteMemories,
   updateMemory,
   exportMemories,
@@ -337,5 +378,6 @@ export const localStorage = {
   getKnowledge,
   deleteKnowledge,
   cleanupExpiredMemories,
+  cleanupTrash,
   getTtlDaysForMemory,
 };

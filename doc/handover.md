@@ -422,6 +422,17 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `plugin.js`：增加 `mode === "update"` 處理。
 - [x] 測試：70/70 通過，包含 `updateMemory preserves existing metadata when not provided`、`updateMemory updates metadata fields`、`updateMemory preserves id and original createdAt when not changed`。
 
+## 記憶管理工具進階功能 (2026-11-04)
+
+- [x] `memoryTools.js::memory.search`：增加 `confidenceFilter`，支援 `scope` 與 `ttlDays`。
+- [x] `memoryTools.js::memory.profile`：完整實作，支援 `timeWindowHours` 時間視窗。
+- [x] `memoryTools.js::memory.forget`：改為 soft-delete（移至 trash）。
+- [x] `memoryTools.js::memory.cleanup-trash`：清理逾齡 trash 條目（保留天數可配置）。
+- [x] `profile.js::buildProfile`：以 `timeWindowHours` 過濾記憶，並排除過期。
+- [x] `dreaming.js`：使用 `softDeleteMemory` 移入 trash，並依 `dreaming.trashRetentionDays` 自動清理 trash。
+- [x] `storage/local.js`：新增 `softDeleteMemory`、`cleanupTrash`，並加入 `TRASH_FILE`。
+- [x] 測試：61/61 通過。
+
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
 ## 下一步

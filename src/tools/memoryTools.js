@@ -20,10 +20,11 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
           query: { type: "string", description: "Search query" },
           scope: { type: "string", description: "Memory scope", default: "default" },
           ttlDays: { type: "number", description: "Optional TTL days filter; if omitted, use memory type TTL" },
+          confidenceFilter: { type: "number", description: "Optional minimum confidence threshold" },
           includeExpired: { type: "boolean", description: "Include expired memories despite TTL", default: false },
         },
-        handler: async ({ query, scope = "default", ttlDays, includeExpired }) => {
-          return storage.searchMemories(query, { scope, ttlDays, includeExpired });
+        handler: async ({ query, scope = "default", ttlDays, confidenceFilter, includeExpired }) => {
+          return storage.searchMemories(query, { scope, ttlDays, confidenceFilter, includeExpired });
         },
       },
       list: {
@@ -38,16 +39,18 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
       },
       profile: {
         description: "Read user profile",
-        parameters: {},
-        handler: async () => {
-          return { type: "info", message: "User profile not yet implemented" };
+        parameters: {
+          timeWindowHours: { type: "number", description: "Time window in hours for profile generation", default: 24 },
+        },
+        handler: async ({ timeWindowHours = 24 }) => {
+          return buildProfile({ storage, memoryConfig, timeWindowHours });
         },
       },
       forget: {
-        description: "Delete a memory by id",
+        description: "Delete a memory by id and move to trash (soft delete)",
         parameters: { id: { type: "string", description: "Memory id" } },
         handler: async ({ id }) => {
-          return storage.deleteMemory(id);
+          return storage.softDeleteMemory(id);
         },
       },
       export: {
@@ -94,6 +97,15 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
             return { expired, count: expired.length, deletedCount: 0 };
           }
           return storage.cleanupExpiredMemories(memoryConfig);
+        },
+      },
+      "cleanup-trash": {
+        description: "Clean old trash entries older than retention period",
+        parameters: {
+          retentionDays: { type: "number", description: "Days to retain trash entries before deleting", default: 90 },
+        },
+        handler: async ({ retentionDays = 90 }) => {
+          return storage.cleanupTrash(retentionDays);
         },
       },
       update: {

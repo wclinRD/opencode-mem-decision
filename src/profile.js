@@ -8,6 +8,7 @@ const PROFILE_FILE = "profile.json";
 const RECENT_LIMIT = 10;
 const KEYWORD_LIMIT = 15;
 const KNOWLEDGE_TITLE_LIMIT = 80;
+const DEFAULT_TIME_WINDOW_HOURS = 24;
 
 const STOPWORDS = new Set([
   // English
@@ -63,7 +64,7 @@ function topKeywords(memories) {
     .slice(0, KEYWORD_LIMIT);
 }
 
-export async function buildProfile({ storage }) {
+export async function buildProfile({ storage, memoryConfig, timeWindowHours = DEFAULT_TIME_WINDOW_HOURS }) {
   const existing = await readProfileFile();
   const promptCount = Number.isInteger(existing?.promptCount) ? existing.promptCount : 0;
 
@@ -71,13 +72,16 @@ export async function buildProfile({ storage }) {
   const memories = await storage.listMemories(10000, "default", defaultConfig);
   const knowledge = await storage.listKnowledge();
 
+  const cutoff = new Date(Date.now() - timeWindowHours * 3600000).toISOString();
+  const windowedMemories = memories.filter((m) => m.createdAt >= cutoff);
+
   const scopes = {};
-  for (const memory of memories) {
+  for (const memory of windowedMemories) {
     const scope = memory.scope || "default";
     scopes[scope] = (scopes[scope] || 0) + 1;
   }
 
-  const userPreferences = memories
+  const userPreferences = windowedMemories
     .filter((m) => m.scope === "user" || m.scope === "global")
     .map((m) => ({
       id: m.id,
@@ -85,12 +89,14 @@ export async function buildProfile({ storage }) {
       updatedAt: m.updatedAt,
     }));
 
-  const recentMemories = memories.slice(0, RECENT_LIMIT).map((m) => ({
-    id: m.id,
-    content: redactCredentials(m.content || ""),
-    scope: m.scope,
-    createdAt: m.createdAt,
-  }));
+  const recentMemories = windowedMemories
+    .slice(0, RECENT_LIMIT)
+    .map((m) => ({
+      id: m.id,
+      content: redactCredentials(m.content || ""),
+      scope: m.scope,
+      createdAt: m.createdAt,
+    }));
 
   const recentKnowledge = [...knowledge]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
@@ -101,13 +107,13 @@ export async function buildProfile({ storage }) {
     generatedAt: new Date().toISOString(),
     promptCount,
     totals: {
-      memories: memories.length,
+      memories: windowedMemories.length,
       knowledge: knowledge.length,
       scopes,
     },
     userPreferences,
     recentMemories,
-    topKeywords: topKeywords(memories),
+    topKeywords: topKeywords(windowedMemories),
     knowledge: {
       count: knowledge.length,
       recentTitles: recentKnowledge,
@@ -122,6 +128,7 @@ export async function recordPrompt({ storage, memoryConfig }) {
   const existing = await readProfileFile();
   const promptCount = (Number.isInteger(existing?.promptCount) ? existing.promptCount : 0) + 1;
   const interval = Number(memoryConfig?.userProfileAnalysisInterval ?? 10);
+  const timeWindowHours = Number(memoryConfig?.profileTimeWindowHours || DEFAULT_TIME_WINDOW_HOURS);
 
   await writeProfileFile({
     ...(existing || {}),
@@ -131,5 +138,5 @@ export async function recordPrompt({ storage, memoryConfig }) {
 
   if (!Number.isFinite(interval) || interval <= 0 || promptCount % interval !== 0) return null;
 
-  return buildProfile({ storage, memoryConfig });
+  return buildProfile({ storage, memoryConfig, timeWindowHours });
 }

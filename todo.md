@@ -29,9 +29,12 @@
 
 ### Step 4：記憶管理工具進階功能
 
-- [ ] `memory.search` 支援 `ttlFilter`、`confidenceFilter`、`scope`。
-- [ ] `memory.profile` 加入時間視窗與過期排除。
-- [ ] `dreaming.js` 加入 soft-delete trash retention 自動清理。
+- [x] `memory.search` 支援 `ttlFilter`、`confidenceFilter`、`scope`。
+- [x] `memory.profile` 加入時間視窗與過期排除（`timeWindowHours`）。
+- [x] `dreaming.js` 加入 soft-delete trash retention 自動清理。
+- [x] 新增 `memory.forget` 為 soft-delete（移入 trash）。
+- [x] 新增 `memory.cleanup-trash` 工具（清理逾齡 trash）。
+- [x] 測試：61/61 通過。
 
 ### Step 5：高階記憶整合
 
