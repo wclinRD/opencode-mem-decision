@@ -469,6 +469,13 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] 更新 `src/config.js` 增加 `extractionProvider`（預設 "stub"）、`extractionApiUrl`、`extractionApiKey`、`extractionModel`。
 - [x] 全部測試通過：84/84。
 
+## User Profile 自動更新（每 N 個 prompts）（2026-11-05）
+
+- [x] `src/profile.js`：`recordPrompt` 累加 `promptCount`，達到 `userProfileAnalysisInterval`（預設 10）後重建並寫入 `<storage>/profile.json`；`buildProfile` 回傳 totals、userPreferences、recentMemories、topKeywords、knowledge。
+- [x] `src/plugin.js` 每次 prompt hook 開始處 fire-and-forget 呼叫 `recordPrompt`，不阻塞 admission。
+- [x] `memory profile` tool 與 `GET /api/profile` 即時重建並持久化 profile。
+- [x] 測試：`tests/profile.test.js` 包含 totals/preferences/keywords、redact、interval 重建，全部 84/84 通過。
+
 ## Database Encryption at Rest（2026-11-04）
 
 - [x] 建立 `src/storage/encryption.js`，使用 `AES-256-GCM` 加密/解密 JSON 資料（衍生金鑰使用 `scrypt`，salt 儲存於 `encryption/salt.json`）。
