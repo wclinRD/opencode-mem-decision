@@ -3,107 +3,212 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OpenCode Memory UI</title>
+  <title>OpenCode Memory Decision</title>
   <style>
     :root {
       --bg: #f7f7f9;
-      --card: #ffffff;
+      --surface: #ffffff;
+      --surface-2: #f1f2f4;
       --border: #e2e2e5;
       --text: #1a1a1f;
       --muted: #6d6d76;
       --primary: #0066cc;
+      --primary-hover: #0052a3;
       --danger: #cc3333;
+      --danger-hover: #a02828;
       --success: #1c8a3c;
+      --success-bg: #e6f5ec;
+      --radius: 10px;
+      --shadow: 0 1px 2px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.06);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121214;
+        --surface: #1c1c1f;
+        --surface-2: #27272a;
+        --border: #38383b;
+        --text: #e8e8ec;
+        --muted: #9a9aa3;
+        --primary: #4a9eff;
+        --primary-hover: #2f85ff;
+        --danger: #ff4f4f;
+        --danger-hover: #d63a3a;
+        --success: #2fbf5a;
+        --success-bg: #1a3a22;
+      }
     }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
-      padding: 24px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
     }
-    header {
+    .app-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+      padding: 20px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: var(--shadow-sm);
     }
-    h1 { margin: 0; font-size: 22px; }
+    .app-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .app-title svg { flex-shrink: 0; }
+    .stats {
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .stats strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .main {
+      flex: 1;
+      padding: 24px 32px;
+    }
+    @media (max-width: 768px) {
+      .app-header { padding: 16px 20px; }
+      .app-title { font-size: 18px; }
+      .main { padding: 20px; }
+      .stats { display: none; }
+    }
     .controls {
       display: flex;
+      flex-wrap: wrap;
       gap: 12px;
+      align-items: end;
       margin-bottom: 16px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 13px;
+      font-weight: 500;
     }
     input, textarea, button {
       padding: 8px 12px;
       font-size: 14px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: var(--card);
+      background: var(--surface);
       color: var(--text);
+      transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
     }
     input:focus, textarea:focus, button:focus {
-      outline: 2px solid var(--primary);
-      outline-offset: 1px;
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
     }
     button {
       cursor: pointer;
-      background: var(--card);
+      background: var(--surface);
     }
     button.primary {
       background: var(--primary);
       color: #fff;
       border-color: var(--primary);
     }
+    button.primary:hover { background: var(--primary-hover); }
     button.danger {
       background: var(--danger);
       color: #fff;
       border-color: var(--danger);
     }
-    button:hover { opacity: 0.9; }
+    button.danger:hover { background: var(--danger-hover); }
+    button.secondary {
+      background: var(--surface-2);
+      color: var(--text);
+      border-color: var(--border);
+    }
+    button.secondary:hover { background: var(--border); }
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .search-controls input {
+      width: 100%;
+      max-width: 320px;
+    }
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
       gap: 16px;
     }
+    @media (max-width: 400px) {
+      .grid { grid-template-columns: 1fr; }
+    }
     .card {
-      background: var(--card);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow 0.2s;
     }
+    .card:hover { box-shadow: var(--shadow); }
     .card h3 {
       margin: 0;
       font-size: 15px;
-    }
-    .card p {
-      margin: 0;
-      font-size: 13px;
-      color: var(--muted);
+      word-break: break-word;
     }
     .card pre {
       margin: 0;
       font-size: 13px;
       overflow: auto;
       white-space: pre-wrap;
-      background: #fafafa;
+      background: var(--surface-2);
       padding: 8px;
-      border-radius: 4px;
+      border-radius: 6px;
       max-height: 200px;
+      border: 1px solid var(--border);
     }
-    .card .meta {
+    .meta {
       font-size: 12px;
       color: var(--muted);
-    }
-    .card .actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
-      margin-top: 8px;
+      align-items: center;
+    }
+    .pill {
+      background: var(--surface-2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 4px;
     }
     .error {
       color: var(--danger);
@@ -113,59 +218,84 @@
       color: var(--muted);
       font-size: 14px;
       padding: 32px 0;
-    }
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      background: var(--card);
-      padding: 16px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      text-align: center;
     }
     textarea {
       min-height: 80px;
       resize: vertical;
+      font-family: inherit;
     }
-    label {
-      font-size: 13px;
-      font-weight: 500;
-    }
-    small {
-      color: var(--muted);
-    }
-    .stats {
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
       display: flex;
-      gap: 24px;
-      font-size: 14px;
-      color: var(--muted);
+      flex-direction: column;
+      gap: 8px;
     }
+    @media (max-width: 768px) {
+      .toast-container { top: auto; bottom: 20px; right: 16px; left: 16px; flex-direction: row; }
+    }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      color: var(--text);
+    }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--danger); }
   </style>
 </head>
 <body>
-  <header>
-    <h1>OpenCode Memory Manager</h1>
+  <header class="app-header">
+    <h1 class="app-title">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary)">
+        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Z"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+      OpenCode Memory Decision
+    </h1>
     <div class="stats" id="stats">
       <span>Memories: <strong id="statMemories">0</strong></span>
       <span>Knowledge: <strong id="statKnowledge">0</strong></span>
     </div>
   </header>
 
-  <form id="addForm">
-    <label for="content">Content</label>
-    <textarea id="content" name="content" required placeholder="Memory content..."></textarea>
-    <div class="controls">
-      <input id="scope" name="scope" value="project" placeholder="scope (default: project)" />
-      <button type="submit" class="primary">Add Memory</button>
+  <main class="main">
+    <form id="addForm" class="form-card">
+      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:end;">
+        <div class="field" style="flex:1 1 300px;">
+          <label for="content">Content</label>
+          <textarea id="content" name="content" required placeholder="Memory content..."></textarea>
+        </div>
+        <div class="field">
+          <label for="scope">Scope</label>
+          <input id="scope" name="scope" value="project" placeholder="scope (default: project)" />
+        </div>
+        <button type="submit" class="primary">Add Memory</button>
+      </div>
+    </form>
+
+    <div class="controls search-controls">
+      <input id="searchInput" type="text" placeholder="Search memories..." />
+      <select id="scopeFilter">
+        <option value="all">All scopes</option>
+      </select>
+      <select id="sortSelect">
+        <option value="desc">Newest first</option>
+        <option value="asc">Oldest first</option>
+      </select>
+      <button id="searchButton" class="secondary">Search</button>
     </div>
-  </form>
 
-  <div class="controls">
-    <input id="searchInput" type="text" placeholder="Search memories..." />
-    <button id="searchButton">Search</button>
-  </div>
+    <div id="memoryList" class="grid"></div>
+  </main>
 
-  <div id="memoryList" class="grid"></div>
+  <div id="toastContainer" class="toast-container"></div>
 
   <script>
     const API = "/api";
@@ -184,6 +314,15 @@
       return data;
     }
 
+    function toast(message, type = 'info') {
+      const c = document.getElementById('toastContainer');
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type === 'success' ? 'success' : type === 'error' ? 'error' : '');
+      t.textContent = message;
+      c.appendChild(t);
+      setTimeout(() => { t.remove(); }, 4000);
+    }
+
     async function loadStats() {
       try {
         const stats = await request("/stats");
@@ -194,12 +333,40 @@
       }
     }
 
+    let scopesPopulated = false;
+    function populateScopeFilter(data) {
+      const sel = document.getElementById("scopeFilter");
+      const existing = new Set();
+      data.forEach((m) => existing.add(m.scope || "default"));
+      const currentValues = new Set();
+      Array.from(sel.options).forEach((opt) => currentValues.add(opt.value));
+      Array.from(existing).sort().forEach((scope) => {
+        if (!currentValues.has(scope)) {
+          const opt = document.createElement("option");
+          opt.value = scope;
+          opt.textContent = scope;
+          sel.appendChild(opt);
+        }
+      });
+      scopesPopulated = true;
+    }
+
     async function loadMemories(filter = null) {
       const list = document.getElementById("memoryList");
       list.innerHTML = "";
       try {
         let data = await request("/memory");
-        if (filter) data = await request("/memory/search?query=" + encodeURIComponent(filter) + "&scope=default");
+        if (!filter) populateScopeFilter(data);
+        const query = (filter || document.getElementById("searchInput").value).trim();
+        const scopeFilter = document.getElementById("scopeFilter").value;
+        const sortSelect = document.getElementById("sortSelect").value;
+        if (query || scopeFilter !== "all") {
+          data = await request("/memory/search?query=" + encodeURIComponent(query) + "&scope=" + encodeURIComponent(scopeFilter === "all" ? "default" : scopeFilter));
+        }
+        data.sort((a, b) => {
+          const order = sortSelect === "asc" ? 1 : -1;
+          return order * (new Date(a.createdAt) - new Date(b.createdAt));
+        });
         if (!data || !data.length) {
           list.innerHTML = `<div class="empty">No memories found.</div>`;
           return;
@@ -211,9 +378,9 @@
             <h3>${escapeHtml(m.id)}</h3>
             <pre>${escapeHtml(m.content)}</pre>
             <div class="meta">
-              scope: ${escapeHtml(m.scope || "default")}
-              <span style="margin-left:8px">created: ${escapeHtml(m.createdAt)}</span>
-              <span style="margin-left:8px">updated: ${escapeHtml(m.updatedAt)}</span>
+              <span class="pill">${escapeHtml(m.scope || "default")}</span>
+              <span>created: ${escapeHtml(m.createdAt)}</span>
+              <span>updated: ${escapeHtml(m.updatedAt)}</span>
             </div>
             <div class="actions">
               <button class="danger" data-id="${escapeHtml(m.id)}">Delete</button>
@@ -223,7 +390,8 @@
           list.appendChild(card);
         });
       } catch (e) {
-        list.innerHTML = `<div class="error">Error: ${escapeHtml(e.message)}</div>`;
+        list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
+        toast("Error: " + e.message, "error");
       }
     }
 
@@ -235,7 +403,9 @@
     async function deleteMemory(id) {
       if (!confirm("Delete memory?")) return;
       await request("/memory/" + id, { method: "DELETE" });
+      toast("Memory deleted.", "success");
       await loadMemories();
+      await loadStats();
     }
 
     document.getElementById("addForm").addEventListener("submit", async (e) => {
@@ -246,16 +416,24 @@
       try {
         await addMemory(content, scope);
         document.getElementById("content").value = "";
+        toast("Memory added.", "success");
         await loadMemories();
         await loadStats();
       } catch (e) {
-        alert("Error: " + e.message);
+        toast("Error: " + e.message, "error");
       }
     });
 
     document.getElementById("searchButton").addEventListener("click", () => {
       const q = document.getElementById("searchInput").value.trim();
       loadMemories(q || null);
+    });
+    document.getElementById("searchInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const q = document.getElementById("searchInput").value.trim();
+        loadMemories(q || null);
+      }
     });
 
     function escapeHtml(text) {

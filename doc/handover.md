@@ -355,7 +355,7 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - dreaming 仍只做相似度兩兩比對，沒有 AI 判斷；trash retention 尚未實作自動清理。
 - 多實例只解決同 process 重複 setup；跨 process 仍是單一 port 持有者，其他 process 假設外部已有服務。
 
-## Web UI 靜態頁面實作 (2026-11-04)
+## Web UI 靜態頁面實作與優化 (2026-11-04)
 
 ### 檔案與路由
 
@@ -371,6 +371,14 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - 記憶查詢：GET `/api/memory`（全部）與 GET `/api/memory/search?query=&scope=`。
 - 統計：GET `/api/stats` 回傳記憶與知識總數。
 - 登入：若配置 `webServerAuthUsername/password`，需透過 Basic Auth，可在 fetch 中手動設定，或由瀏覽器提示 Basic Auth 輸入（fetch 需主動帶上 `Authorization: Basic <base64>`）。
+
+### 近期優化
+
+- 深色模式：依系統 `prefers-color-scheme` 自動切換色彩。
+- Toast 通知：成功與錯誤以彈出式 toast 取代 `alert`。
+- 範圍篩選器：從所有記憶動態提取 unique scopes，搜尋時支援限定單一 scope 與所有範圍。
+- 排序：依建立時間新到舊或舊到新排序（前端 sort）。
+- 排版： Sticky header、卡片陰影與 hover、pill badge、響應式網格、form 與搜尋列優化。
 
 ### 限制
 
