@@ -456,8 +456,8 @@
               <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
               <span class="pill" data-conf="${escapeHtml(m.confidence || 0.5)}">${Number(m.confidence || 0.5).toFixed(2)}</span>
               <span class="pill" data-sens="${escapeHtml(m.sensitivity || 'normal')}">${escapeHtml(m.sensitivity || "normal")}</span>
-              <span>created: ${escapeHtml(m.createdAt)}</span>
-              <span>updated: ${escapeHtml(m.updatedAt)}</span>
+              <span>created: ${formatLocalTime(m.createdAt)}</span>
+              <span>updated: ${formatLocalTime(m.updatedAt)}</span>
             </div>
             <div class="actions">
               <button class="danger" data-id="${escapeHtml(m.id)}">Delete</button>
@@ -579,6 +579,12 @@
       return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
     }
 
+    function formatLocalTime(iso) {
+      const d = new Date(iso);
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
     async function loadKnowledge() {
       const list = document.getElementById("knowledgeList");
       list.innerHTML = "";
@@ -596,8 +602,8 @@
             <h3>${escapeHtml(k.id)}</h3>
             <pre>${escapeHtml(k.content)}</pre>
             <div class="meta">
-              <span>created: ${escapeHtml(k.createdAt)}</span>
-              <span>updated: ${escapeHtml(k.updatedAt)}</span>
+              <span>created: ${formatLocalTime(k.createdAt)}</span>
+              <span>updated: ${formatLocalTime(k.updatedAt)}</span>
             </div>
             <div class="actions">
               <button class="danger" data-id="${escapeHtml(k.id)}">Delete</button>
