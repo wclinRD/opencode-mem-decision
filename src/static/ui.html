@@ -181,21 +181,19 @@
       .grid { grid-template-columns: 1fr; }
     }
     .card {
-      background: linear-gradient(180deg, color-mix(in srgb, var(--surface), transparent 5%), var(--surface));
-      border: 1px solid color-mix(in srgb, var(--border), transparent 25%);
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 14px;
       padding: 18px;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 4px 14px rgba(0,0,0,0.06);
-      transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
-      position: relative;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      transition: transform 0.15s ease-out, box-shadow 0.2s ease;
     }
     .card:hover {
-      box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08);
-      border-color: color-mix(in srgb, var(--primary), var(--border) 30%);
       transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
     .card h3 {
       margin: 0;
@@ -204,44 +202,67 @@
       word-break: break-word;
       color: var(--text);
     }
-    .card pre {
-      margin: 0;
-      font-size: 13px;
-      overflow: auto;
-      white-space: pre-wrap;
-      background: color-mix(in srgb, var(--surface-2), transparent 10%);
-      padding: 10px;
-      border-radius: 8px;
-      max-height: 200px;
-      border: 1px solid color-mix(in srgb, var(--border), transparent 15%);
-      line-height: 1.45;
+    .card-content {
+      background: var(--surface-2);
       color: var(--text);
+      font-size: 13px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid var(--border);
+      line-height: 1.5;
+      min-height: 32px;
     }
     .meta {
       font-size: 12px;
       color: var(--muted);
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
     }
     .pill {
-      background: color-mix(in srgb, var(--surface-2), transparent 5%);
+      background: var(--surface-2);
       color: var(--muted);
-      border: 1px solid color-mix(in srgb, var(--border), transparent 15%);
+      border: 1px solid var(--border);
       border-radius: 9999px;
-      padding: 3px 10px;
+      padding: 2px 8px;
       font-size: 12px;
-      font-weight: 500;
-      transition: background-color 0.2s, color 0.2s;
     }
-    .pill[data-type] { color: var(--primary); }
-    .pill[data-conf] { color: var(--success); }
-    .pill[data-sens] { color: var(--danger); }
+    .pill.sensitivity-normal {
+      color: var(--success);
+      border-color: var(--success);
+    }
+    .pill.sensitivity-warning {
+      color: #e8a020;
+      border-color: #e8a020;
+    }
+    .pill.sensitivity-high {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+    .pill.conf-high {
+      color: var(--success);
+      border-color: var(--success);
+    }
+    .pill.conf-medium {
+      color: #e8a020;
+      border-color: #e8a020;
+    }
+    .pill.conf-low {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+    .time-row {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
     .actions {
       display: flex;
       justify-content: flex-end;
-      margin-top: 4px;
+      margin-top: 6px;
     }
     .error {
       color: var(--danger);
@@ -462,17 +483,19 @@
         data.forEach((m) => {
           const card = document.createElement("div");
           card.className = "card";
+          const conf = Number(m.confidence || 0.5);
+          const confClass = conf >= 0.8 ? "conf-high" : conf >= 0.5 ? "conf-medium" : "conf-low";
+          const sensClass = (m.sensitivity || "normal").toLowerCase();
           card.innerHTML = `
             <h3>${escapeHtml(m.id)}</h3>
-            <pre>${escapeHtml(m.content)}</pre>
+            <div class="card-content">${escapeHtml(m.content)}</div>
             <div class="meta">
               <span class="pill">${escapeHtml(m.scope || "default")}</span>
               <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
-              <span class="pill" data-conf="${escapeHtml(m.confidence || 0.5)}">${Number(m.confidence || 0.5).toFixed(2)}</span>
-              <span class="pill" data-sens="${escapeHtml(m.sensitivity || 'normal')}">${escapeHtml(m.sensitivity || "normal")}</span>
-              <span>created: ${formatLocalTime(m.createdAt)}</span>
-              <span>updated: ${formatLocalTime(m.updatedAt)}</span>
+              <span class="pill ${confClass}" data-conf="${escapeHtml(m.confidence || 0.5)}">${conf.toFixed(2)}</span>
+              <span class="pill sensitivity-${sensClass}">${escapeHtml(m.sensitivity || "normal")}</span>
             </div>
+            <div class="time-row">created: ${formatLocalTime(m.createdAt)} · updated: ${formatLocalTime(m.updatedAt)}</div>
             <div class="actions">
               <button class="danger" data-id="${escapeHtml(m.id)}">Delete</button>
             </div>
@@ -614,11 +637,8 @@
           card.className = "card";
           card.innerHTML = `
             <h3>${escapeHtml(k.id)}</h3>
-            <pre>${escapeHtml(k.content)}</pre>
-            <div class="meta">
-              <span>created: ${formatLocalTime(k.createdAt)}</span>
-              <span>updated: ${formatLocalTime(k.updatedAt)}</span>
-            </div>
+            <div class="card-content">${escapeHtml(k.content)}</div>
+            <div class="time-row">created: ${formatLocalTime(k.createdAt)} · updated: ${formatLocalTime(k.updatedAt)}</div>
             <div class="actions">
               <button class="danger" data-id="${escapeHtml(k.id)}">Delete</button>
             </div>
