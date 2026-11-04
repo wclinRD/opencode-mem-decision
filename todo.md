@@ -51,7 +51,7 @@
 - [x] `src/capture.js` 的 auto-capture 現直接使用 storage `addMemory` 的內建去重並回傳 `update` 或 `add` 結果。
 - [x] 測試：84/84 通過（含 `dedup.test.js`）。
 
-- [ ] Remote API backend（OpenAI-compatible embeddings）。
+- [x] Remote API backend（OpenAI-compatible embeddings）。
 - [x] Auto-Capture AI 提取 stub（provider structured output）：整合 `src/extraction.js`，在 auto-capture 產生 summary/decisions/codeSnippets 記憶。
 - [x] User Profile 自動更新（每 N 個 prompts）：`src/profile.js` 的 `recordPrompt` 已實現 promptCount 累計與 interval 時重建，`src/plugin.js` 於每次 prompt hook 觸發。
 - [x] Shared project memory via `.opencode-mem-project`: 已實作 projectShared.js 讀寫標記與 shared-project scope。
