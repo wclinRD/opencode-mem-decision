@@ -108,6 +108,26 @@ export async function deleteMemory(id) {
   return false;
 }
 
+export async function deleteMemories(query, scope = "default") {
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+
+  const scoped = db.memories.filter((m) => scope === "default" || m.scope === scope);
+  const queryTokens = [...new Set(tokenize(query))];
+  const toDeleteIds = scoped
+    .filter((memory) => {
+      if (!queryTokens.length) return true;
+      const memoryTokens = new Set(tokenize(memory.content));
+      return queryTokens.some((token) => memoryTokens.has(token));
+    })
+    .map((m) => m.id);
+
+  const deletedCount = db.memories.filter((m) => toDeleteIds.includes(m.id)).length;
+  db.memories = db.memories.filter((m) => !toDeleteIds.includes(m.id));
+  await writeJsonFile(filePath, db);
+  return deletedCount;
+}
+
 export async function updateMemory(id, updates) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -203,6 +223,7 @@ export const localStorage = {
   listMemories,
   getMemory,
   deleteMemory,
+  deleteMemories,
   updateMemory,
   exportMemories,
   importMemories,

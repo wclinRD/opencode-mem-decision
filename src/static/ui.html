@@ -290,6 +290,7 @@
         <option value="asc">Oldest first</option>
       </select>
       <button id="searchButton" class="secondary">Search</button>
+      <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
     </div>
 
     <div id="memoryList" class="grid"></div>
@@ -433,6 +434,27 @@
         e.preventDefault();
         const q = document.getElementById("searchInput").value.trim();
         loadMemories(q || null);
+      }
+    });
+    const deleteAllFilterButton = document.getElementById("deleteAllFilterButton");
+    function updateDeleteAllFilterState() {
+      const q = document.getElementById("searchInput").value.trim();
+      const scopeFilter = document.getElementById("scopeFilter").value;
+      deleteAllFilterButton.disabled = !(q || scopeFilter !== "all");
+    }
+    document.getElementById("searchInput").addEventListener("input", updateDeleteAllFilterState);
+    document.getElementById("scopeFilter").addEventListener("change", updateDeleteAllFilterState);
+    deleteAllFilterButton.addEventListener("click", async () => {
+      const q = document.getElementById("searchInput").value.trim();
+      const scopeFilter = document.getElementById("scopeFilter").value;
+      if (!confirm(`Delete ${q ? "matching" : "all within"} scope "${scopeFilter}"?`)) return;
+      try {
+        const deleted = await request("/memory?" + new URLSearchParams({ query: q, scope: scopeFilter }), { method: "DELETE" });
+        toast(`Deleted ${deleted.deleted} memory(ies).`, "success");
+        await loadMemories();
+        await loadStats();
+      } catch (e) {
+        toast("Error: " + e.message, "error");
       }
     });
 

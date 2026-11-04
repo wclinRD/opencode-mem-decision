@@ -85,6 +85,11 @@ export function createWebServer({ memoryConfig, storage }) {
       } else if (path.match(/^\/api\/memory\/[^/]+$/) && method === "GET") {
         const id = path.split("/").pop();
         sendJson(res, 200, await storage.getMemory(id));
+      } else if (path === "/api/memory" && method === "DELETE") {
+        const scope = url.searchParams.get("scope") || "default";
+        const query = url.searchParams.get("query") || "";
+        const deletedCount = await storage.deleteMemories(query, scope);
+        sendJson(res, 200, { deleted: deletedCount });
       } else if (path === "/api/memory" && method === "POST") {
         const body = await parseBody(req);
         sendJson(res, 201, await storage.addMemory(body.content, body.scope || "project"));
