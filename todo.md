@@ -38,7 +38,11 @@
 
 ### Step 5：高階記憶整合
 
-- [ ] libSQL/Turso Local Vector DB。
+- [x] 實作 `EmbeddingService`，支援遠端 OpenAI 相容 API 與 Hugging Face Inference，以及本地 stub（固定維度 768）。
+- [x] `src/storage/local.js` 在 `addMemory`、`updateMemory` 儲存 `embedding`，`searchMemories` 支援 `vectorSearch`（餘弦相似度）。
+- [x] `src/plugin.js` 初始化 embedding service 並註冊至 storage。
+- [x] 測試：82/82 通過（embedding.test.js + storage.test.js）。
+
 - [ ] Markdown Vault backend。
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
 - [ ] Auto-Capture AI 提取 stub（provider structured output）。

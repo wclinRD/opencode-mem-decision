@@ -7,6 +7,8 @@ import { injectMemories, formatInjectedPrompt, stripInjectedBlock, INJECTION_MAR
 import { buildProfile, recordPrompt } from "./profile.js";
 import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory } from "./classify.js";
+import { EmbeddingService } from "./embedding.js";
+import { setEmbeddingService } from "./storage/local.js";
 
 // Sessions that already received the one-shot injection. Module level because
 // the hook registration lives for the whole process.
@@ -136,6 +138,10 @@ export default Plugin.define({
   async setup(ctx) {
     const memoryConfig = loadConfig(ctx.options || {});
     const { localStorage } = await import("./storage/local.js");
+
+    // Initialize embedding service
+    const embeddingService = new EmbeddingService(memoryConfig);
+    setEmbeddingService(embeddingService);
 
     const cleanups = [];
 

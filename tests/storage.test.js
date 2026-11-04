@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import * as fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { localStorage, getStorageDir } from "../src/storage/local.js";
+import { localStorage, getStorageDir, setEmbeddingService } from "../src/storage/local.js";
 import { buildProfile } from "../src/profile.js";
 import { runDreaming, restoreTrashEntry } from "../src/dreaming.js";
+import { EmbeddingService } from "../src/embedding.js";
 
 const TEST_DIR = path.join(os.tmpdir(), `opencode-mem-storage-test-${process.pid}-${Date.now()}`);
 
@@ -293,4 +294,50 @@ test("storage - updateMemory preserves id and original createdAt when not change
   const updatedAtMs = Date.parse(updated.updatedAt);
   const createdAtMs = Date.parse(updated.createdAt);
   assert.ok(updatedAtMs >= createdAtMs);
+});
+
+test("storage - vector search finds similar memories", async () => {
+  const embeddingService = new EmbeddingService({ embeddingModel: "Xenova/nomic-embed-text-v1" });
+  setEmbeddingService(embeddingService);
+
+  await localStorage.addMemory("Vector search test topic one", "project");
+  await localStorage.addMemory("Vector search test topic two", "project");
+  await localStorage.addMemory("Unrelated content about weather", "project");
+
+  const results = await localStorage.searchMemories("Vector search test topic one", {
+    scope: "project",
+    vectorSearch: true,
+    similarityThreshold: 0.4,
+  });
+
+  assert.ok(results.length >= 1);
+  const found1 = results.find((m) => m.content === "Vector search test topic one");
+  const found2 = results.find((m) => m.content === "Vector search test topic two");
+  assert.ok(found1);
+  assert.ok(found2);
+
+  setEmbeddingService(null);
+});
+
+test("storage - vector search fallback to string search on error", async () => {
+  const embeddingService = new EmbeddingService({ embeddingModel: "Xenova/nomic-embed-text-v1" });
+  // Mock embed to throw
+  embeddingService.embed = () => Promise.reject(new Error("Embedding error"));
+  setEmbeddingService(embeddingService);
+
+  await localStorage.addMemory("Token search test string", "project");
+  const results = await localStorage.searchMemories("Token search test string", {
+    scope: "project",
+    vectorSearch: true,
+  });
+  assert.ok(results.length >= 1);
+
+  setEmbeddingService(null);
+});
+
+test("storage - searchMemories still works without embedding service", async () => {
+  setEmbeddingService(null);
+  const memory = await localStorage.addMemory("Search by tokens", "project");
+  const results = await localStorage.searchMemories("Search by tokens", { scope: "project" });
+  assert.ok(results.some((m) => m.id === memory.id));
 });

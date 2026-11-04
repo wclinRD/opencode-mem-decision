@@ -433,6 +433,20 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `storage/local.js`：新增 `softDeleteMemory`、`cleanupTrash`，並加入 `TRASH_FILE`。
 - [x] 測試：61/61 通過。
 
+## 高階記憶整合：Embedding Service 與 Vector Search（2026-11-04）
+
+- [x] 建立 `src/embedding.js`，提供 `EmbeddingService` 類別：
+  - 支援遠端 OpenAI 相容 `/v1/embeddings` API（可設定 `embeddingApiUrl` 與 `embeddingApiKey`）。
+  - 支援 Hugging Face Inference API（`api-inference.huggingface.co/models/<model>`）。
+  - 當無 API 且 `model` 以 `Xenova/` 開頭時，使用本地 stub（固定維度 768，基於文字雜湊，已正規化）。
+- [x] `src/storage/local.js`：
+  - 透過 `setEmbeddingService` 注入 embedding service。
+  - `addMemory` 與 `updateMemory` 在支援時計算並儲存 `embedding` 陣列。
+  - `searchMemories` 新增 `vectorSearch: true`，使用餘弦相似度計算查詢向量與記憶向量，回傳符合門檻的向量檢索結果。
+- [x] `src/plugin.js`：初始化 `EmbeddingService` 並設定至 storage 層。
+- [x] 新增 `tests/embedding.test.js`（8 個測試）與 `tests/storage.test.js`（vector search 相關測試）。
+- [x] 測試總數：72 全部通過。
+
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
 ## 下一步

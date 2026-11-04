@@ -1,7 +1,18 @@
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { EmbeddingService, cosineSimilarity } from "../embedding.js";
 import { redactCredentials } from "../security.js";
+
+let currentEmbeddingService = null;
+
+export function setEmbeddingService(service) {
+  currentEmbeddingService = service;
+}
+
+export function getEmbeddingService() {
+  return currentEmbeddingService;
+}
 
 const HOME_DIR = process.env.HOME || os.homedir() || "~";
 const MEMORIES_FILE = "memories.db.json";
@@ -41,9 +52,19 @@ export async function addMemory(content, scope = "project", sessionId, metadata 
   await ensureDir(path.dirname(filePath));
   const db = await readJsonFile(filePath);
 
+  const redacted = redactCredentials(content);
+  let embedding = null;
+  if (currentEmbeddingService) {
+    try {
+      embedding = await currentEmbeddingService.embed(redacted);
+    } catch (e) {
+      console.error(`[opencode-mem] embedding failed: ${e.message}`);
+    }
+  }
+
   const memory = {
     id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-    content: redactCredentials(content),
+    content: redacted,
     scope,
     type: metadata.type || "fact",
     confidence: Number.isFinite(metadata.confidence) ? metadata.confidence : 0.5,
@@ -53,6 +74,7 @@ export async function addMemory(content, scope = "project", sessionId, metadata 
     ...(sessionId ? { sessionId } : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    ...(embedding ? { embedding } : {}),
   };
 
   db.memories.push(memory);
@@ -105,11 +127,13 @@ export async function searchMemories(query, filters = {}) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
+  const vectorSearch = filters.vectorSearch === true;
   const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
   const typeFilter = filters.type;
   const confidenceFilter = filters.confidence;
   const priorityFilter = filters.priority;
   const timeRange = filters.timeRange;
+  const similarityThreshold = filters.similarityThreshold || 0.5;
 
   let scoped = db.memories.filter((m) => effectiveScope === "default" || m.scope === effectiveScope);
 
@@ -133,6 +157,22 @@ export async function searchMemories(query, filters = {}) {
   if (timeRange) {
     const cutoff = new Date(Date.now() - timeRange).toISOString();
     scoped = scoped.filter((m) => m.createdAt >= cutoff);
+  }
+
+  // Filter by query vector if vectorSearch is enabled and embedding available
+  if (vectorSearch && currentEmbeddingService && query && query.length > 0) {
+    try {
+      const queryVec = await currentEmbeddingService.embed(query);
+      return scoped
+        .filter((memory) => memory.embedding && memory.embedding.length === queryVec.length)
+        .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, queryVec) }))
+        .filter((entry) => entry.similarity >= similarityThreshold)
+        .sort((a, b) => b.similarity - a.similarity)
+        .map((entry) => entry.memory);
+    } catch (e) {
+      console.error(`[opencode-mem] vector search failed: ${e.message}`);
+      // fallback to string search below
+    }
   }
 
   const queryTokens = query ? [...new Set(tokenize(query))] : [];
@@ -274,6 +314,18 @@ export async function updateMemory(id, updates) {
         memory[key] = updates[key];
       }
     }
+  }
+
+  if (updates.content) {
+    let embedding = null;
+    if (currentEmbeddingService) {
+      try {
+        embedding = await currentEmbeddingService.embed(redactCredentials(updates.content));
+      } catch (e) {
+        console.error(`[opencode-mem] embedding failed: ${e.message}`);
+      }
+    }
+    memory.embedding = embedding;
   }
 
   Object.assign(memory, { updatedAt: new Date().toISOString() });
