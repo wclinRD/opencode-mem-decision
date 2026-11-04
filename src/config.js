@@ -33,7 +33,7 @@ const DEFAULT_CONFIG = {
     defaultScope: "project",
   },
   webServerHost: "127.0.0.1",
-  webServerPort: 4747,
+  webServerPort: 56789,
   webServerAuthUsername: "",
   webServerAuthPassword: "",
   knowledgeEnabled: true,

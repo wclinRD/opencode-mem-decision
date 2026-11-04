@@ -44,10 +44,10 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
    - Soft-delete 進 trash
 
 7. **Web UI**
-   - Memory–prompt timeline
-   - Captures 檢查、user profile 管理
-   - Trash restore、manual dream run
-   - Stats tab
+   - Static HTML/JS memory manager (`src/static/ui.html`)
+   - GET /api/memory, POST /api/memory, DELETE /api/memory/:id, GET /api/stats
+   - Search memories via GET /api/memory/search?query=&scope=
+   - Basic Auth via `webServerAuthUsername/password`
 
 8. **Security & Privacy**
    - Credential redaction
@@ -119,7 +119,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
   "opencodeProvider": "anthropic",
   "opencodeModel": "claude-haiku-4-5-20251001",
   "webServerHost": "127.0.0.1",
-  "webServerPort": 4747,
+  "webServerPort": 56789,
   "webServerAuthUsername": "",
   "webServerAuthPassword": ""
 }
@@ -184,7 +184,8 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 2. **Basic tools**：`memory` (add/search/list/profile/forget/export/import/migrate/list-shards/dream/restore-trash) 與 `knowledge` (list/show/save/delete)。
 3. **Basic storage**：JSON file based storage (`memories.db.json`, `knowledge.db.json`, `trash.db.json`)。
 4. **Web server scaffolding**：`src/server.js` with `GET /api/memory`, `GET /api/knowledge`, `GET /api/stats`, basic auth pattern.
-5. **Config interface**：`src/config.js` 已包含 `chatMessage`, `dreaming`, `webServerPort`, `updateOnCapture*`, `knowledgeEnabled`.
+5. **Static Web UI**：`src/static/ui.html` 由 `src/server.js` 在 `/` 與 `/index.html` 下提供；API CRUD、search 與 basic auth。
+6. **Config interface**：`src/config.js` 已包含 `chatMessage`, `dreaming`, `webServerPort: 56789`, `updateOnCapture*`, `knowledgeEnabled`.
 6. **Credential redaction**：`src/security.js` 實作移除 GitHub token、OpenAI key、AWS key、Slack token、GCP key、PEM private key.
 7. **Storage interface**：`src/storage/local.js` 提供 add/search/list/delete/export/import 介面.
 8. **Auto-Capture core**：`src/capture.js` 實作 simHash + Jaccard similarity, smart deduplication, update-on-capture.
@@ -203,8 +204,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 7. **Schema migrations & lock files**.
 8. **Shared project memory via `.opencode-mem-project` marker file**.
 9. **Shared skills registry + REST API**.
-10. **Web UI (React/Vite)**.
-11. **Integration/E2E tests**.
+10. **Integration/E2E tests**.
 
 ## 已知限制
 
@@ -237,7 +237,7 @@ cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definiti
    - `execute` 回傳 `{ content }`；非字串結果以 `JSON.stringify` 序列化。
    - 15 個 mode 全部保留（add/search/list/profile/forget/migrate/export/import/list-shards/dream/restore-trash/knowledge-*）。
 3. `index.js`：只保留 `export { default } from "./src/plugin.js"`，移除失效的 named `plugin` export。
-4. `src/server.js`：web server 啟動條件改為 `webServerHost` 非空即啟動（預設 `127.0.0.1`）；加上 `error` handler，port 被占用時只記 log，不讓 host process crash。`setup` 回傳的 cleanup 會 `server.close()` 並 abort event subscription。
+4. `src/server.js`：web server 啟動條件改為 `webServerHost` 非空即啟動（預設 `127.0.0.1`），預設 port 改為 `56789`；加上 `error` handler，port 被占用時只記 log，不讓 host process crash；根路徑 `/` 與 `/index.html` 返回 `src/static/ui.html`。`setup` 回傳的 cleanup 會 `server.close()` 並 abort event subscription。
 5. `session.idle` 接上 auto-capture：`ctx.event.subscribe({ types: ["session.idle"], signal })` → `ctx.session.context({ sessionID })` → `autoCapture({ sessionData, memoryConfig, storage })`。
 6. `tests/plugin.test.js` 改測 V2 形狀：`plugin.id`、`plugin.setup`、tool 註冊、JSON Schema、`execute` 回傳 `{ content }`、web server 啟動。`npm test` 23/23 pass。
 7. `src/storage/local.js`（`~` 展開）與 `src/config.js`（deep merge）是本次工作前既有的未提交修改，保留不動。
@@ -256,7 +256,7 @@ timestamp=2026-11-04T03:36:33.564Z level=INFO run=b5cdda88 msg="loading plugin" 
 {"id":"opencode-mem-decision","source":{"type":"local","path":"/Users/wclin/.config/opencode/plugins/opencode-mem-decision"},"features":{"server":true},"state":{"status":"active"}}
 ```
 
-web server（`127.0.0.1:4747`）實際可用：`curl http://127.0.0.1:4747/api/stats` 回傳 `{"memories":...,"knowledge":...,"timestamp":...}`。
+web server（`127.0.0.1:56789`）實際可用：`curl http://127.0.0.1:56789/api/stats` 回傳 `{"memories":...,"knowledge":...,"timestamp":...}`。
 全域 `index.js` 以 `node -e "import(...)"` 載入，`default.id === "opencode-mem-decision"`、`typeof default.setup === "function"`。
 
 > 註：`03:36:29` 有一次短暫的 `failed to load plugin`（`createPlugin` 匯入錯誤），發生在複製檔案與 `npm install` 之間的空窗；安裝完成後 reload 即恢復，屬已排除的暫時狀態。
@@ -284,7 +284,7 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 
 - ~~**Memory injection**~~：已接上 `ctx.session.hook("prompt", ...)`，見下一節。
 - ~~**`profile` mode**~~：已實作，見下一節。
-- **Web UI**：只有 REST API，尚無前端。
+- **Web UI**：已實作靜態 HTML/JS 管理器（`src/static/ui.html`），提供 CRUD 與搜尋功能。
 - ~~**多實例同時載入**~~：同 process 已共用 server；跨 process 仍只記錄 EADDRINUSE，見下一節。
 
 ## 功能補完 (2026-11-04，第二輪)
@@ -354,6 +354,29 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - 注入的記憶只在 prompt 尾端附加；V2 hook 只給 `PromptInput.Prompt`，沒有 system prompt 注入點。
 - dreaming 仍只做相似度兩兩比對，沒有 AI 判斷；trash retention 尚未實作自動清理。
 - 多實例只解決同 process 重複 setup；跨 process 仍是單一 port 持有者，其他 process 假設外部已有服務。
+
+## Web UI 靜態頁面實作 (2026-11-04)
+
+### 檔案與路由
+
+- `src/static/ui.html`：純 HTML/CSS/JS 管理介面。
+- `src/server.js`：在 `path === "/" || path === "/index.html"` 時回傳 `src/static/ui.html`。
+- `src/server.js`：新增 `GET /api/memory/search?query=<q>&scope=<s>`，回傳 `storage.searchMemories(query, scope)`。
+- `src/config.js`：`webServerPort` 預設改為 `56789`。
+
+### UI 功能
+
+- 記憶新增：POST `/api/memory`（內容、scope）。
+- 記憶刪除：DELETE `/api/memory/:id`。
+- 記憶查詢：GET `/api/memory`（全部）與 GET `/api/memory/search?query=&scope=`。
+- 統計：GET `/api/stats` 回傳記憶與知識總數。
+- 登入：若配置 `webServerAuthUsername/password`，需透過 Basic Auth，可在 fetch 中手動設定，或由瀏覽器提示 Basic Auth 輸入（fetch 需主動帶上 `Authorization: Basic <base64>`）。
+
+### 限制
+
+- 目前沒有 React/Vite，只有原生 HTML/JS。
+- 搜尋是關鍵字比對，不是 embedding；中文 token 以連續漢字為單位。
+- 未實作 memory–prompt timeline、user profile 管理等進階介面。
 
 ## 參考資源
 

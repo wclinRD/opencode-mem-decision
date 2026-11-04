@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenCode Memory UI</title>
+  <style>
+    :root {
+      --bg: #f7f7f9;
+      --card: #ffffff;
+      --border: #e2e2e5;
+      --text: #1a1a1f;
+      --muted: #6d6d76;
+      --primary: #0066cc;
+      --danger: #cc3333;
+      --success: #1c8a3c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    h1 { margin: 0; font-size: 22px; }
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    input, textarea, button {
+      padding: 8px 12px;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+    }
+    input:focus, textarea:focus, button:focus {
+      outline: 2px solid var(--primary);
+      outline-offset: 1px;
+    }
+    button {
+      cursor: pointer;
+      background: var(--card);
+    }
+    button.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    button.danger {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+    button:hover { opacity: 0.9; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .card p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .card pre {
+      margin: 0;
+      font-size: 13px;
+      overflow: auto;
+      white-space: pre-wrap;
+      background: #fafafa;
+      padding: 8px;
+      border-radius: 4px;
+      max-height: 200px;
+    }
+    .card .meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .card .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .error {
+      color: var(--danger);
+      font-size: 13px;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 14px;
+      padding: 32px 0;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--card);
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+    label {
+      font-size: 13px;
+      font-weight: 500;
+    }
+    small {
+      color: var(--muted);
+    }
+    .stats {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OpenCode Memory Manager</h1>
+    <div class="stats" id="stats">
+      <span>Memories: <strong id="statMemories">0</strong></span>
+      <span>Knowledge: <strong id="statKnowledge">0</strong></span>
+    </div>
+  </header>
+
+  <form id="addForm">
+    <label for="content">Content</label>
+    <textarea id="content" name="content" required placeholder="Memory content..."></textarea>
+    <div class="controls">
+      <input id="scope" name="scope" value="project" placeholder="scope (default: project)" />
+      <button type="submit" class="primary">Add Memory</button>
+    </div>
+  </form>
+
+  <div class="controls">
+    <input id="searchInput" type="text" placeholder="Search memories..." />
+    <button id="searchButton">Search</button>
+  </div>
+
+  <div id="memoryList" class="grid"></div>
+
+  <script>
+    const API = "/api";
+    const base64Credentials = ""; // set if auth is enabled: btoa(username + ":" + password)
+    const headers = base64Credentials ? { Authorization: "Basic " + base64Credentials } : {};
+
+    async function request(path, options = {}) {
+      const url = API + path;
+      const res = await fetch(url, {
+        ...options,
+        headers: { "Content-Type": "application/json", ...headers, ...options.headers },
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) {}
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    async function loadStats() {
+      try {
+        const stats = await request("/stats");
+        document.getElementById("statMemories").textContent = stats.memories;
+        document.getElementById("statKnowledge").textContent = stats.knowledge;
+      } catch (e) {
+        console.error("stats error", e);
+      }
+    }
+
+    async function loadMemories(filter = null) {
+      const list = document.getElementById("memoryList");
+      list.innerHTML = "";
+      try {
+        let data = await request("/memory");
+        if (filter) data = await request("/memory/search?query=" + encodeURIComponent(filter) + "&scope=default");
+        if (!data || !data.length) {
+          list.innerHTML = `<div class="empty">No memories found.</div>`;
+          return;
+        }
+        data.forEach((m) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <h3>${escapeHtml(m.id)}</h3>
+            <pre>${escapeHtml(m.content)}</pre>
+            <div class="meta">
+              scope: ${escapeHtml(m.scope || "default")}
+              <span style="margin-left:8px">created: ${escapeHtml(m.createdAt)}</span>
+              <span style="margin-left:8px">updated: ${escapeHtml(m.updatedAt)}</span>
+            </div>
+            <div class="actions">
+              <button class="danger" data-id="${escapeHtml(m.id)}">Delete</button>
+            </div>
+          `;
+          card.querySelector("button").addEventListener("click", () => deleteMemory(m.id));
+          list.appendChild(card);
+        });
+      } catch (e) {
+        list.innerHTML = `<div class="error">Error: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function addMemory(content, scope = "project") {
+      const result = await request("/memory", { method: "POST", body: JSON.stringify({ content, scope }) });
+      return result;
+    }
+
+    async function deleteMemory(id) {
+      if (!confirm("Delete memory?")) return;
+      await request("/memory/" + id, { method: "DELETE" });
+      await loadMemories();
+    }
+
+    document.getElementById("addForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const content = document.getElementById("content").value.trim();
+      const scope = document.getElementById("scope").value.trim() || "project";
+      if (!content) return;
+      try {
+        await addMemory(content, scope);
+        document.getElementById("content").value = "";
+        await loadMemories();
+        await loadStats();
+      } catch (e) {
+        alert("Error: " + e.message);
+      }
+    });
+
+    document.getElementById("searchButton").addEventListener("click", () => {
+      const q = document.getElementById("searchInput").value.trim();
+      loadMemories(q || null);
+    });
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    }
+
+    (async () => {
+      await loadStats();
+      await loadMemories();
+    })();
+  </script>
+</body>
+</html>

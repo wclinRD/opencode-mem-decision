@@ -1,7 +1,12 @@
 import http from "http";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 import { localStorage } from "./storage/local.js";
 import { buildProfile } from "./profile.js";
 import { runDreaming } from "./dreaming.js";
+
+const UI_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "static", "ui.html");
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -58,7 +63,11 @@ export function createWebServer({ memoryConfig, storage }) {
     const path = url.pathname;
 
     try {
-      if (path === "/api/memory" && method === "GET") {
+      if (path === "/" || path === "/index.html") {
+        const html = await fs.readFile(UI_FILE, "utf-8");
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+      } else if (path === "/api/memory" && method === "GET") {
         sendJson(res, 200, await storage.listMemories());
       } else if (path === "/api/knowledge" && method === "GET") {
         sendJson(res, 200, await storage.listKnowledge());
@@ -69,6 +78,10 @@ export function createWebServer({ memoryConfig, storage }) {
           knowledge: (await storage.listKnowledge()).length,
           timestamp: new Date().toISOString(),
         });
+      } else if (path === "/api/memory/search" && method === "GET") {
+        const query = url.searchParams.get("query") || "";
+        const scope = url.searchParams.get("scope") || "default";
+        sendJson(res, 200, await storage.searchMemories(query, scope));
       } else if (path.match(/^\/api\/memory\/[^/]+$/) && method === "GET") {
         const id = path.split("/").pop();
         sendJson(res, 200, await storage.getMemory(id));

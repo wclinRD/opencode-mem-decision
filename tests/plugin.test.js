@@ -222,3 +222,35 @@ test("system - two setups share one server and release the port", async () => {
 
   await assert.rejects(() => fetch(`http://127.0.0.1:${port}/api/stats`));
 });
+
+test("system - root route serves static UI", async () => {
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const { context } = createContext({ webServerHost: "127.0.0.1", webServerPort: port });
+  const cleanup = await plugin.setup(context);
+
+  const response = await fetch(`http://127.0.0.1:${port}/`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /text\/html/);
+  const body = await response.text();
+  assert.match(body, /OpenCode Memory Manager/);
+
+  await cleanup();
+});
+
+test("system - search endpoint returns matching memories", async () => {
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const { context } = createContext({ webServerHost: "127.0.0.1", webServerPort: port });
+  const cleanup = await plugin.setup(context);
+
+  try {
+    await localStorage.addMemory("Test search content here", "project");
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/memory/search?query=search&scope=project`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.ok(Array.isArray(body));
+    assert.ok(body.some((m) => m.content.includes("Test search content here")));
+  } finally {
+    await cleanup();
+  }
+});
