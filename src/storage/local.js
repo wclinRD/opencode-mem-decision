@@ -4,9 +4,14 @@ import os from "os";
 import { redactCredentials } from "../security.js";
 
 const HOME_DIR = process.env.HOME || os.homedir() || "~";
-const STORAGE_DIR = path.join(HOME_DIR, ".opencode-memory");
 const MEMORIES_FILE = "memories.db.json";
 const KNOWLEDGE_FILE = "knowledge.db.json";
+
+export function getStorageDir() {
+  const override = process.env.OPENCODE_MEM_DIR;
+  if (override) return path.resolve(override);
+  return path.join(HOME_DIR, ".opencode-memory");
+}
 
 async function ensureDir(dir) {
   try {
@@ -30,8 +35,8 @@ async function writeJsonFile(filePath, data) {
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
-export async function addMemory(content, scope = "project") {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+export async function addMemory(content, scope = "project", sessionId) {
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   await ensureDir(path.dirname(filePath));
   const db = await readJsonFile(filePath);
 
@@ -39,6 +44,7 @@ export async function addMemory(content, scope = "project") {
     id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     content: redactCredentials(content),
     scope,
+    ...(sessionId ? { sessionId } : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -48,15 +54,34 @@ export async function addMemory(content, scope = "project") {
   return memory;
 }
 
+function tokenize(text) {
+  return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+}
+
 export async function searchMemories(query, scope = "default") {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
-  return db.memories.filter((m) => scope === "default" || m.scope === scope);
+  const scoped = db.memories.filter((m) => scope === "default" || m.scope === scope);
+  const queryTokens = [...new Set(tokenize(query))];
+
+  if (!queryTokens.length) {
+    return scoped.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  return scoped
+    .map((memory) => {
+      const memoryTokens = new Set(tokenize(memory.content));
+      const score = queryTokens.reduce((total, token) => total + (memoryTokens.has(token) ? 1 : 0), 0);
+      return { memory, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || new Date(b.createdAt) - new Date(a.createdAt))
+    .map((entry) => entry.memory);
 }
 
 export async function listMemories(limit = 50, scope = "default") {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
   return db.memories
@@ -66,13 +91,13 @@ export async function listMemories(limit = 50, scope = "default") {
 }
 
 export async function getMemory(id) {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   return db.memories.find((m) => m.id === id) || null;
 }
 
 export async function deleteMemory(id) {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   const index = db.memories.findIndex((m) => m.id === id);
   if (index >= 0) {
@@ -84,7 +109,7 @@ export async function deleteMemory(id) {
 }
 
 export async function updateMemory(id, updates) {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   const memory = db.memories.find((m) => m.id === id);
   if (!memory) return null;
@@ -95,14 +120,14 @@ export async function updateMemory(id, updates) {
 }
 
 export async function exportMemories(outputPath) {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   await fs.writeFile(outputPath, JSON.stringify(db.memories, null, 2), "utf-8");
   return outputPath;
 }
 
 export async function importMemories(inputPath) {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const data = JSON.parse(await fs.readFile(inputPath, "utf-8"));
   const db = await readJsonFile(filePath);
   db.memories.push(...data);
@@ -111,14 +136,14 @@ export async function importMemories(inputPath) {
 }
 
 export async function listShards() {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   const shards = new Set(db.memories.map((m) => m.scope || "default"));
   return Array.from(shards);
 }
 
 export async function migrate(fromPath) {
-  const filePath = path.join(STORAGE_DIR, MEMORIES_FILE);
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const fromDb = JSON.parse(await fs.readFile(fromPath, "utf-8"));
   const toDb = await readJsonFile(filePath);
   toDb.memories.push(...fromDb.memories || []);
@@ -127,7 +152,7 @@ export async function migrate(fromPath) {
 }
 
 export async function addKnowledge(content, id) {
-  const filePath = path.join(STORAGE_DIR, KNOWLEDGE_FILE);
+  const filePath = path.join(getStorageDir(), KNOWLEDGE_FILE);
   await ensureDir(path.dirname(filePath));
   const db = await readJsonFile(filePath);
 
@@ -149,19 +174,19 @@ export async function addKnowledge(content, id) {
 }
 
 export async function listKnowledge() {
-  const filePath = path.join(STORAGE_DIR, KNOWLEDGE_FILE);
+  const filePath = path.join(getStorageDir(), KNOWLEDGE_FILE);
   const db = await readJsonFile(filePath);
   return db.knowledge || [];
 }
 
 export async function getKnowledge(id) {
-  const filePath = path.join(STORAGE_DIR, KNOWLEDGE_FILE);
+  const filePath = path.join(getStorageDir(), KNOWLEDGE_FILE);
   const db = await readJsonFile(filePath);
   return (db.knowledge || []).find((k) => k.id === id) || null;
 }
 
 export async function deleteKnowledge(id) {
-  const filePath = path.join(STORAGE_DIR, KNOWLEDGE_FILE);
+  const filePath = path.join(getStorageDir(), KNOWLEDGE_FILE);
   const db = await readJsonFile(filePath);
   const index = (db.knowledge || []).findIndex((k) => k.id === id);
   if (index >= 0) {

@@ -1,5 +1,7 @@
 import http from "http";
 import { localStorage } from "./storage/local.js";
+import { buildProfile } from "./profile.js";
+import { runDreaming } from "./dreaming.js";
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -29,7 +31,20 @@ function basicAuth(req, username, password) {
   return decodedUser === username && decodedPass === password;
 }
 
+// One HTTP server per process and host/port. Every OpenCode instance loads its
+// own copy of the plugin, but a single process may set it up more than once.
+let sharedServer = null;
+
 export function createWebServer({ memoryConfig, storage }) {
+  const host = memoryConfig.webServerHost;
+  const port = memoryConfig.webServerPort || 4747;
+  const key = `${host}:${port}`;
+
+  if (sharedServer && sharedServer.key === key) {
+    sharedServer.refs += 1;
+    return sharedServer.server;
+  }
+
   const server = http.createServer(async (req, res) => {
     const { webServerAuthUsername, webServerAuthPassword } = memoryConfig;
     if (!basicAuth(req, webServerAuthUsername, webServerAuthPassword)) {
@@ -64,9 +79,9 @@ export function createWebServer({ memoryConfig, storage }) {
         const id = path.split("/").pop();
         sendJson(res, 200, { deleted: await storage.deleteMemory(id) });
       } else if (path === "/api/profile" && method === "GET") {
-        sendJson(res, 200, { type: "info", message: "User profile not yet implemented" });
+        sendJson(res, 200, await buildProfile({ memoryConfig, storage }));
       } else if (path === "/api/dream" && method === "POST") {
-        sendJson(res, 501, { error: "Dreaming not yet implemented" });
+        sendJson(res, 200, await runDreaming({ memoryConfig, storage }));
       } else if (path.match(/^\/api\/skills/) && method === "GET") {
         sendJson(res, 501, { error: "Skills registry not yet implemented" });
       } else {
@@ -77,14 +92,50 @@ export function createWebServer({ memoryConfig, storage }) {
     }
   });
 
-  const port = memoryConfig.webServerPort || 4747;
-  // A busy port must not crash the host process.
+  sharedServer = { key, server, refs: 1, closed: false };
+
+  // A busy port must not crash the host process. Another OpenCode instance is
+  // already serving the API on this port, so keep going without retrying.
   server.on("error", (error) => {
-    console.error(`OpenCode Memory web server error: ${error.message}`);
+    if (error.code === "EADDRINUSE") {
+      console.log(
+        `[opencode-mem-decision] port ${port} already in use; assuming another OpenCode instance serves the memory API`,
+      );
+      return;
+    }
+    console.error(`[opencode-mem-decision] web server error: ${error.message}`);
   });
-  server.listen(port, memoryConfig.webServerHost, () => {
-    console.log(`OpenCode Memory web server listening on http://${memoryConfig.webServerHost}:${port}`);
+
+  server.listen(port, host, () => {
+    console.log(`[opencode-mem-decision] web server listening on http://${host}:${port}`);
   });
 
   return server;
+}
+
+export async function releaseWebServer(server) {
+  const state = sharedServer;
+  if (!state || state.server !== server) return;
+
+  state.refs -= 1;
+  if (state.refs > 0) return;
+
+  sharedServer = null;
+  if (state.closed) return;
+  state.closed = true;
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    try {
+      server.close(finish);
+      server.closeAllConnections?.();
+    } catch {
+      finish();
+    }
+  });
 }

@@ -1,5 +1,6 @@
 import { redactCredentials } from "./security.js";
 import { searchMemories } from "./storage/local.js";
+import { stripInjectedBlock } from "./inject.js";
 
 const simHash = (text) => {
   const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
@@ -35,7 +36,11 @@ export function isDuplicate(newContent, existingMemories, threshold = 0.75) {
 export async function autoCapture({ sessionData, memoryConfig, storage }) {
   if (!memoryConfig.chatMessage?.enabled) return;
 
-  const sessionText = sessionData?.messages?.map((m) => m.content).join("\n") || "";
+  const sessionText =
+    (sessionData?.messages || [])
+      .map((m) => stripInjectedBlock(m?.content || ""))
+      .filter(Boolean)
+      .join("\n") || "";
   if (!sessionText) return;
 
   const existingMemories = await storage.listMemories(1000);
@@ -51,7 +56,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage }) {
   }
 
   if (!dedup.duplicate) {
-    const memory = await storage.addMemory(sessionText, "project");
+    const memory = await storage.addMemory(sessionText, "project", sessionData?.id);
     return { action: "add", id: memory.id };
   }
 

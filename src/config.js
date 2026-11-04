@@ -17,6 +17,7 @@ const DEFAULT_CONFIG = {
   updateOnCaptureEnabled: false,
   updateOnCaptureSimilarityThreshold: 0.75,
   updateOnCaptureMaxCandidates: 5,
+  userProfileAnalysisInterval: 10,
   dreaming: {
     enabled: false,
     relatedThreshold: 0.75,

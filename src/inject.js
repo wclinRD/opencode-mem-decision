@@ -1,5 +1,16 @@
 import { searchMemories, listMemories } from "./storage/local.js";
 
+export const INJECTION_MARKER = "<!-- opencode-mem-decision:injected -->";
+
+// Injected memories are appended at the end of a prompt, after the marker.
+// Cut the text at the marker so the memory block is not fed back into capture.
+export function stripInjectedBlock(text) {
+  if (typeof text !== "string") return text;
+  const index = text.indexOf(INJECTION_MARKER);
+  if (index === -1) return text;
+  return text.slice(0, index).trimEnd();
+}
+
 export async function injectMemories({ sessionData, memoryConfig, storage }) {
   if (!memoryConfig.chatMessage?.enabled) return [];
 
@@ -13,6 +24,11 @@ export async function injectMemories({ sessionData, memoryConfig, storage }) {
   if (recallMode === "relevant" || recallMode === "both") {
     const query = sessionData?.latestMessage || sessionData?.messages?.slice(-1)?.[0]?.content || "";
     candidates = await searchMemories(query, recallScope);
+
+    // Default recall must still do something when nothing is relevant.
+    if (recallMode === "relevant" && candidates.length === 0) {
+      candidates = await listMemories(maxMemories * 2, recallScope);
+    }
   }
 
   if (recallMode === "recent" || (recallMode === "both" && candidates.length < maxMemories)) {
@@ -25,6 +41,13 @@ export async function injectMemories({ sessionData, memoryConfig, storage }) {
   if (excludeCurrentSession && sessionData?.id) {
     candidates = candidates.filter((m) => m.sessionId !== sessionData.id);
   }
+
+  const seenIds = new Set();
+  candidates = candidates.filter((m) => {
+    if (seenIds.has(m.id)) return false;
+    seenIds.add(m.id);
+    return true;
+  });
 
   const filtered = candidates.slice(0, maxMemories);
 

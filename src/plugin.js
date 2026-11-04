@@ -2,7 +2,13 @@ import { Plugin } from "@opencode/plugin";
 import { loadConfig } from "./config.js";
 import { autoCapture } from "./capture.js";
 import { runDreaming } from "./dreaming.js";
-import { createWebServer } from "./server.js";
+import { createWebServer, releaseWebServer } from "./server.js";
+import { injectMemories, formatInjectedPrompt, stripInjectedBlock, INJECTION_MARKER } from "./inject.js";
+import { buildProfile, recordPrompt } from "./profile.js";
+
+// Sessions that already received the one-shot injection. Module level because
+// the hook registration lives for the whole process.
+const injectedSessions = new Set();
 
 const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
@@ -74,7 +80,7 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
   if (mode === "add") return storage.addMemory(args.content, args.scope || "project");
   if (mode === "search") return storage.searchMemories(args.query, args.scope || "default");
   if (mode === "list") return storage.listMemories(args.limit || 50, args.scope || "default");
-  if (mode === "profile") return { type: "info", message: "User profile not yet implemented" };
+  if (mode === "profile") return buildProfile({ storage, memoryConfig });
   if (mode === "forget") return storage.deleteMemory(args.id);
   if (mode === "export") return storage.exportMemories(args.outputPath);
   if (mode === "import") return storage.importMemories(args.inputPath);
@@ -95,10 +101,10 @@ function toToolResult(value) {
 function sessionText(messages) {
   const parts = [];
   for (const message of messages || []) {
-    if (typeof message?.text === "string") parts.push(message.text);
+    if (typeof message?.text === "string") parts.push(stripInjectedBlock(message.text));
     if (Array.isArray(message?.content)) {
       for (const part of message.content) {
-        if (part?.type === "text" && typeof part.text === "string") parts.push(part.text);
+        if (part?.type === "text" && typeof part.text === "string") parts.push(stripInjectedBlock(part.text));
       }
     }
   }
@@ -116,7 +122,7 @@ export default Plugin.define({
     if (memoryConfig.webServerHost) {
       try {
         const server = createWebServer({ memoryConfig, storage: localStorage });
-        cleanups.push(() => new Promise((resolve) => server.close(() => resolve())));
+        cleanups.push(() => releaseWebServer(server));
       } catch (error) {
         console.error(`[opencode-mem-decision] web server failed to start: ${error.message}`);
       }
@@ -132,8 +138,39 @@ export default Plugin.define({
       });
     });
 
-    // Auto-capture runs on idle sessions. Injection needs a prompt-rewrite API
-    // that this module does not use yet; see doc/handover.md.
+    if (typeof ctx.session?.hook === "function") {
+      const registration = await ctx.session.hook("prompt", async (event) => {
+        if (!memoryConfig.chatMessage?.enabled) return;
+        if (!event?.prompt || typeof event.prompt.text !== "string") return;
+
+        void recordPrompt({ storage: localStorage, memoryConfig }).catch(() => {});
+
+        const injectOn = memoryConfig.chatMessage.injectOn || "first";
+        const sessionID = event.sessionID;
+
+        if (injectOn === "first") {
+          if (injectedSessions.has(sessionID)) return;
+          if (event.prompt.text.includes(INJECTION_MARKER)) {
+            injectedSessions.add(sessionID);
+            return;
+          }
+        }
+
+        const memories = await injectMemories({
+          sessionData: { id: sessionID, latestMessage: event.prompt.text },
+          memoryConfig,
+          storage: localStorage,
+        });
+        const block = formatInjectedPrompt(memories);
+        if (!block) return;
+
+        event.prompt.text = `${event.prompt.text}\n\n${INJECTION_MARKER}\n${block}`;
+        if (injectOn === "first") injectedSessions.add(sessionID);
+      });
+      cleanups.push(() => registration?.dispose?.());
+    }
+
+    // Auto-capture runs on idle sessions.
     if (ctx.event?.subscribe && ctx.session?.context) {
       const controller = new AbortController();
       cleanups.push(() => controller.abort());

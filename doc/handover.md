@@ -280,12 +280,80 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 
 成功時只有 `loading plugin`，沒有 `failed to load plugin`；`memory` tool 會出現在工具清單。
 
-### 尚未接上
+### 尚未接上（已於下一節補完）
 
-- **Memory injection**：尚未註冊 `ctx.session.hook("prompt", ...)`。V2 的 `SessionPrompt` 只給 `prompt`（`PromptInput.Prompt`）與 `metadata`，與 `injectMemories({ sessionData, ... })` 期待的 `sessionData.messages` 形狀不合，需先確認可安全改寫 prompt 的方式；`src/inject.js` 目前沒有被 plugin 呼叫。
-- **`profile` mode**：仍是 stub。
+- ~~**Memory injection**~~：已接上 `ctx.session.hook("prompt", ...)`，見下一節。
+- ~~**`profile` mode**~~：已實作，見下一節。
 - **Web UI**：只有 REST API，尚無前端。
-- **多實例同時載入**：每個 opencode process 都會嘗試綁 `127.0.0.1:4747`，第二個實例會拿到 `EADDRINUSE`（只記 log、不影響載入）。若要多實例共用，需改成單一持有者或可設定的 port。
+- ~~**多實例同時載入**~~：同 process 已共用 server；跨 process 仍只記錄 EADDRINUSE，見下一節。
+
+## 功能補完 (2026-11-04，第二輪)
+
+上一節列的「尚未接上」已補完，以下為本輪變更。
+
+### 1. Prompt 注入接線
+
+- `src/plugin.js` 在 `ctx.session?.hook` 存在時註冊 `ctx.session.hook("prompt", ...)`。
+- `chatMessage.enabled === false` 時整個 hook 直接返回。
+- `sessionData` adapter 為 `{ id: event.sessionID, latestMessage: event.prompt.text }`。
+- `injectOn: "first"`（預設）以 module-level `Set` 記錄已注入的 session；prompt 已含 marker 也視為已注入。其他值（`"always"` / `"every"`）每次 prompt 都注入。
+- 注入內容以 `\n\n` + `<!-- opencode-mem-decision:injected -->` + `\n` 接在使用者文字後面，不覆蓋原文。
+- `src/inject.js` 新增 `stripInjectedBlock(text)`（從 marker 切掉）。auto-capture 逐則 message 先 strip，避免把注入內容再存成記憶。
+- auto-capture 建立的回憶會帶 `sessionId`（`addMemory(content, scope, sessionId)`）；tool 的 `add` 不帶。
+- `injectMemories` 的 `excludeCurrentSession` 以 `m.sessionId !== sessionData.id` 過濾。
+- 注入前依 `id` 去重（保留排名最前者），避免真實 store 內同 id 重複資料佔用 token。
+- `recall: "relevant"` 在零命中時 fallback 到 recent，預設注入仍會有內容；`"recent"` / `"both"` 語意不變。
+
+### 2. 關鍵字搜尋
+
+`src/storage/local.js` 的 `searchMemories(query, scope)`：
+
+- 以 `/[\p{L}\p{N}]+/gu` tokenize（Unicode 字母/數字）。
+- 分數 = 命中 query token 數；query 非空時過濾 score > 0。
+- 排序 score desc、createdAt desc；空 query 回傳 scope 內全部（新到舊）。
+
+### 3. User profile
+
+- 新增 `src/profile.js`：`buildProfile`、`recordPrompt`。
+- profile 內容：`generatedAt`、`promptCount`、`totals`（memories/knowledge/scopes）、`userPreferences`（scope `user`/`global`）、`recentMemories`（最新 10）、`topKeywords`（前 15，含英文與繁中 stopword）、`knowledge`（count + 最新 10 個標題前 80 字）。
+- 寫入 `<storage>/profile.json`；`getStorageDir()` 為唯一路徑來源。
+- `recordPrompt` 每次 prompt 累加 `promptCount`；達到 `userProfileAnalysisInterval`（預設 10）時重建並回傳 profile，否則回傳 `null`。prompt hook 以 fire-and-forget 呼叫，不阻塞 admission。
+- `memory({ mode: "profile" })` 與 `GET /api/profile` 都回傳即時重建（並持久化）的 profile。
+- 所有複製到 profile 的 content 都經 `redactCredentials`。
+
+### 4. 多實例 web server
+
+- `src/server.js` 以 module-level shared server + ref count 管理。
+- 同 process 同 host/port 第二次 `createWebServer` 只增加 ref 並回傳同一 server。
+- `releaseWebServer(server)` 遞減 ref，歸零時 `close`（並 `closeAllConnections`）後清除 shared state；重複呼叫安全。
+- `EADDRINUSE` 只印一行：
+  `[opencode-mem-decision] port 4747 already in use; assuming another OpenCode instance serves the memory API`
+  不 crash、不重試、不改 port。
+- plugin cleanup 改呼叫 `releaseWebServer(server)`。
+
+### 5. Dreaming trash 與 `/api/dream`
+
+- `src/dreaming.js` 改用 `getStorageDir()` 組合 `trash.db.json`（原本是未展開的 `"~/.opencode-memory"`）。
+- 順帶修正 dreaming 讀取記憶的 scope：原本 `listMemories(1000, "all-projects")` 永遠抓不到一般記憶，改為 `"default"`（全部）。
+- `POST /api/dream` 呼叫 `runDreaming` 並回傳結果；`/api/skills` 維持 501。
+
+### 6. 測試隔離
+
+- `src/storage/local.js` 移除 module-level `STORAGE_DIR`，改為 `getStorageDir()`：`OPENCODE_MEM_DIR` 優先，否則 `$HOME/.opencode-memory`。
+- `tests/storage.test.js`、`tests/profile.test.js`、`tests/inject.test.js`、`tests/plugin.test.js` 都在 `beforeEach` 設定 `OPENCODE_MEM_DIR` 到 temp dir、`afterEach` 清除，不再污染真實 home。
+- `tests/plugin.test.js` 的 fake context 會依名稱保存 `session.hook` callback；新增 prompt hook 註冊、first/always 注入、profile 形狀、兩個 setup 共用 server 並釋放 port 的測試。
+
+### 驗證
+
+`npm test`：40 tests，40 pass，0 fail。
+
+### 本輪限制
+
+- 搜尋仍是關鍵字比對，不是 embedding；中文 token 以連續漢字為單位，長句關鍵字品質有限。
+- profile 的 `topKeywords` 對中文只做整段 token，沒有斷詞。
+- 注入的記憶只在 prompt 尾端附加；V2 hook 只給 `PromptInput.Prompt`，沒有 system prompt 注入點。
+- dreaming 仍只做相似度兩兩比對，沒有 AI 判斷；trash retention 尚未實作自動清理。
+- 多實例只解決同 process 重複 setup；跨 process 仍是單一 port 持有者，其他 process 假設外部已有服務。
 
 ## 參考資源
 
