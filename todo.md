@@ -54,7 +54,7 @@
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
 - [x] Auto-Capture AI 提取 stub（provider structured output）：整合 `src/extraction.js`，在 auto-capture 產生 summary/decisions/codeSnippets 記憶。
 - [x] User Profile 自動更新（每 N 個 prompts）：`src/profile.js` 的 `recordPrompt` 已實現 promptCount 累計與 interval 時重建，`src/plugin.js` 於每次 prompt hook 觸發。
-- [ ] Shared project memory via `.opencode-mem-project`。
+- [ ] Shared project memory via `.opencode-mem-project`: 已實作 projectShared.js 讀寫標記與 shared-project scope。
 - [ ] Shared skills registry + REST API。
 
 ## 優先級建議

@@ -40,6 +40,10 @@ const DEFAULT_CONFIG = {
   extractionProvider: "stub",
   extractionApiUrl: "",
   extractionApiKey: "",
+  projectShared: {
+    enabled: true,
+    markerFileName: ".opencode-mem-project",
+  },
   opencodeProvider: "anthropic",
   opencodeModel: "claude-haiku-4-5-20251001",
   memory: {

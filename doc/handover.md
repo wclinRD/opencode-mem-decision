@@ -503,6 +503,13 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
+## Shared project memory via `.opencode-mem-project`（2026-11-05）
+
+- [x] 建立 `src/projectShared.js`：`findProjectMarker` 向上尋找 `.opencode-mem-project`，解析項目名稱（小寫化並 sanitise）；`createProjectMarker` 可建立標記檔案。
+- [x] `src/config.js` 加入 `projectShared: { enabled: true, markerFileName: ".opencode-mem-project" }`。
+- [x] `capture.js::autoCapture` 在加入記憶時檢測 project marker，有標記則儲存為 `shared-project` scope，並附加 `project:<name>` 標籤。
+- [x] 測試：`tests/projectShared.test.js`（5 個測試），全部 89/89 通過。
+
 ## 下一步
 
 1. 確認功能模組清單無誤。

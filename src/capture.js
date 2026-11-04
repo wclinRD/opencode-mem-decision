@@ -4,6 +4,7 @@ import { stripInjectedBlock } from "./inject.js";
 import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory as defaultClassifyMemory } from "./classify.js";
 import { loadConfig } from "./config.js";
+import { resolveProjectShared } from "./projectShared.js";
 
 const simHash = (text) => {
   const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
@@ -125,16 +126,18 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   });
 
   const duplicateConfig = memoryConfig.duplicateDetection || { enabled: true, similarityThreshold: 0.75, updateOnMatch: true };
+  const projectShared = await resolveProjectShared({ memoryConfig, cwd: process.cwd() });
+  const projectTag = projectShared ? [projectShared.projectName] : [];
   const memory = await storage.addMemory(
     redactCredentials(filtered),
-    "project",
+    projectShared ? "shared-project" : "project",
     sessionData?.id,
     {
       type: classified.type,
       confidence: classified.confidence,
       sensitive: classified.sensitive,
       priority: classified.priority,
-      tags: classified.tags,
+      tags: [...(classified.tags || []), ...projectTag],
     },
     duplicateConfig
   );
@@ -159,13 +162,31 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
 
         if (summary) {
           const summaryText = `Auto-extracted summary:\n${summary}\nTopics: ${topics.join(", ")}`;
-          await storage.addMemory(summaryText, "project", sessionData?.id, { type: "summary", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction"] }, duplicateConfig);
+          await storage.addMemory(
+            summaryText,
+            projectShared ? "shared-project" : "project",
+            sessionData?.id,
+            { type: "summary", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
+            duplicateConfig
+          );
         }
         if (decisions.length > 0) {
-          await storage.addMemory(`Auto-extracted decisions:\n${decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")}`, "project", sessionData?.id, { type: "decision", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction"] }, duplicateConfig);
+          await storage.addMemory(
+            `Auto-extracted decisions:\n${decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")}`,
+            projectShared ? "shared-project" : "project",
+            sessionData?.id,
+            { type: "decision", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
+            duplicateConfig
+          );
         }
         if (codeSnippets.length > 0) {
-          await storage.addMemory(`Auto-extracted code snippets:\n${codeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}`, "project", sessionData?.id, { type: "code", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction"] }, duplicateConfig);
+          await storage.addMemory(
+            `Auto-extracted code snippets:\n${codeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
+            projectShared ? "shared-project" : "project",
+            sessionData?.id,
+            { type: "code", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
+            duplicateConfig
+          );
         }
       }
     } catch (e) {
