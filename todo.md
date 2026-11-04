@@ -12,11 +12,13 @@
 
 ### Step 2：記憶 TTL / 過期清理機制
 
-- [ ] 設計記憶 TTL 規則（按 type/confidence/priority）。
-- [ ] 在 `storage/local.js` 實作自動清理過期記憶。
-- [ ] 在 `config.js` 加入 `memory.ttl.defaultDays`、`memory.ttl.factDays` 等參數。
-- [ ] 實作 `memory.cleanup-expired` custom tool。
-- [ ] 在 `searchMemories` 加入 TTL 篩選。
+- [x] 設計記憶 TTL 規則（按 type/priority/sensitivity）。
+- [x] 在 `storage/local.js` 實作 `getTtlDaysForMemory`、`cleanupExpiredMemories`、`listAllMemories`。
+- [x] 在 `config.js` 加入 `memory.ttl.defaultDays`、`memory.ttl.factDays`、`memory.ttl.lowPriorityDays`、`memory.ttl.sensitiveDays`。
+- [x] 實作 `memory.cleanup-expired` custom tool (dry-run/no-delete mode).
+- [x] 在 `searchMemories`/`listMemories` 加入 TTL 篩選。
+- [x] 更新 `server.js`, `plugin.js`, `inject.js`, `capture.js`, `dreaming.js`, `profile.js` 使用 TTL-aware list/search.
+- [x] 測試：58/58 通過，包含 TTL-helper、cleanup、search TTL filter.
 
 ### Step 3：更新記憶時保留元數據
 

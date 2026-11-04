@@ -406,6 +406,14 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] 測試：`tests/eventLog.test.js` 調整以符合新邏輯。
 - [x] 全部測試通過（55/55）。
 
+## 記憶體 TTL 與過期清理機制 (2026-11-04)
+
+- [x] `config.js`：新增 `memory.ttl` 設定（`defaultDays`, `factDays`, `lowPriorityDays`, `sensitiveDays`）。
+- [x] `storage/local.js`：新增 `getTtlDaysForMemory`, `cleanupExpiredMemories`, `listAllMemories`, TTL 篩選至 `searchMemories`/`listMemories`。
+- [x] `memoryTools.js`：新增 `memory.cleanup-expired` 工具（支援 dry-run）。
+- [x] `server.js`, `plugin.js`, `inject.js`, `capture.js`, `dreaming.js`, `profile.js`：全面採用 TTL-aware 查詢。
+- [x] 測試：58/58 通過，包含 TTL helper、cleanup、search TTL filter。
+
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
 ## 下一步
