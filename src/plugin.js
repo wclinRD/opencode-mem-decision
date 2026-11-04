@@ -143,6 +143,10 @@ export default Plugin.define({
     const { initEncryption } = await import("./storage/local.js");
     await initEncryption(memoryConfig);
 
+    // Initialize schema migrations
+    const { initStorage } = await import("./storage/local.js");
+    await initStorage(memoryConfig);
+
     // Initialize embedding service
     const embeddingService = new EmbeddingService(memoryConfig);
     setEmbeddingService(embeddingService);

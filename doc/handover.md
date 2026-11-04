@@ -455,6 +455,13 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `src/plugin.js` 在 setup 時呼叫 `initEncryption`，確保加密層初始化。
 - [x] 測試：`tests/storage.test.js` 新增 `encryption stores and decrypts data`，成功儲存與解密加密記憶檔。
 
+## Schema Migrations & Lock Files（2026-11-04）
+
+- [x] 建立 `src/storage/migrations.js`，提供 `SCHEMA_VERSION = 2`，`readVersion`、`writeVersion`、`applyMigration`、`lockMigrations`、`unlockMigrations`、`ensureSchema`。
+- [x] `src/storage/local.js` 引入 `ensureSchema`，`src/plugin.js` 在 setup 時呼叫 `initStorage` 確保 schema。
+- [x] 測試：`tests/migrations.test.js` 包含版本預設、`ensureSchema` 升級以及讀寫一致性測試。
+- [x] 測試總數：76 全部通過。
+
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
 ## 下一步

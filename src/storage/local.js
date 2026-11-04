@@ -4,6 +4,7 @@ import os from "os";
 import { EmbeddingService, cosineSimilarity } from "../embedding.js";
 import { redactCredentials } from "../security.js";
 import { deriveKey, encryptData, decryptData } from "./encryption.js";
+import { ensureSchema } from "./migrations.js";
 import { randomBytes } from "node:crypto";
 
 let currentEmbeddingService = null;
@@ -42,6 +43,10 @@ export async function initEncryption(config) {
     }
   }
   encryptionKey = await deriveKey(password, salt);
+}
+
+export async function initStorage(config) {
+  await ensureSchema();
 }
 
 const HOME_DIR = process.env.HOME || os.homedir() || "~";
