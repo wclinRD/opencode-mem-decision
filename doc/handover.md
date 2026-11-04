@@ -69,7 +69,7 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 - **Embeddings**: `@huggingface/transformers` (local), OpenAI-compatible API (remote)
 - **AI Providers**: Anthropic, OpenAI, OpenRouter, GitHub Copilot
 - **Web UI**: React + Vite (或 Next.js)
-- **Plugin Framework**: `@opencode-ai/plugin`
+- **Plugin Framework**: `@opencode/plugin` (V2, 2.2.x)
 
 ## 安裝與配置
 
@@ -213,9 +213,83 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 3. **Remote embeddings**：需 OpenAI-compatible API endpoint 與 API key。
 4. **Structured output requirement**：auto-capture 與 profile learning 需要 provider 支援 structured/tool-call output。
 
+## V2 Plugin Migration (2026-11-04)
+
+### 問題
+
+OpenCode 已升級到 v2.2.0，但 plugin 仍是 V1 形狀 `export default { id, server }`，使用 `@opencode-ai/plugin/tool`。V2 loader 直接拒絕載入，log 證據：
+
+```
+level=WARN message="failed to load plugin" target=/Users/wclin/.config/opencode/plugins/opencode-mem-decision
+cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function.
+(cause: SchemaError(Missing key at ["default"]["effect"] Missing key at ["default"]["setup"])))])"
+```
+
+另一個中間錯誤（已排除）：從 `@opencode-ai/plugin/dist/promise/index.js` 匯入不存在的 `createPlugin`。
+
+### 修正內容
+
+1. `package.json`：依賴由 `@opencode-ai/plugin@^1.0.0` 改為 `@opencode/plugin@^2.2.5`，`package-lock.json` 與 `node_modules` 同步更新。
+2. `src/plugin.js`：改為 `export default Plugin.define({ id: "opencode-mem-decision", async setup(ctx) {...} })`。
+   - 設定改從 `ctx.options` 讀取。
+   - `memory` tool 由 `await ctx.tool.transform((editor) => editor.add({...}))` 註冊；callback 保持同步，config/storage 在 transform 之前載入。
+   - `input` 由 `tool.schema` 改為 JSON Schema（`type: "object"`、`required: ["mode"]`、`additionalProperties: false`）。
+   - `execute` 回傳 `{ content }`；非字串結果以 `JSON.stringify` 序列化。
+   - 15 個 mode 全部保留（add/search/list/profile/forget/migrate/export/import/list-shards/dream/restore-trash/knowledge-*）。
+3. `index.js`：只保留 `export { default } from "./src/plugin.js"`，移除失效的 named `plugin` export。
+4. `src/server.js`：web server 啟動條件改為 `webServerHost` 非空即啟動（預設 `127.0.0.1`）；加上 `error` handler，port 被占用時只記 log，不讓 host process crash。`setup` 回傳的 cleanup 會 `server.close()` 並 abort event subscription。
+5. `session.idle` 接上 auto-capture：`ctx.event.subscribe({ types: ["session.idle"], signal })` → `ctx.session.context({ sessionID })` → `autoCapture({ sessionData, memoryConfig, storage })`。
+6. `tests/plugin.test.js` 改測 V2 形狀：`plugin.id`、`plugin.setup`、tool 註冊、JSON Schema、`execute` 回傳 `{ content }`、web server 啟動。`npm test` 23/23 pass。
+7. `src/storage/local.js`（`~` 展開）與 `src/config.js`（deep merge）是本次工作前既有的未提交修改，保留不動。
+
+### 驗證（2026-11-04，實機）
+
+`opencode service restart` 後，log 只出現載入成功，沒有 `failed to load plugin`：
+
+```
+timestamp=2026-11-04T03:36:33.564Z level=INFO run=b5cdda88 msg="loading plugin" id=/Users/wclin/.config/opencode/plugins/opencode-mem-decision entrypoint=file:///Users/wclin/.config/opencode/plugins/opencode-mem-decision/index.js role=server
+```
+
+`opencode api get /api/plugin` 回傳：
+
+```json
+{"id":"opencode-mem-decision","source":{"type":"local","path":"/Users/wclin/.config/opencode/plugins/opencode-mem-decision"},"features":{"server":true},"state":{"status":"active"}}
+```
+
+web server（`127.0.0.1:4747`）實際可用：`curl http://127.0.0.1:4747/api/stats` 回傳 `{"memories":...,"knowledge":...,"timestamp":...}`。
+全域 `index.js` 以 `node -e "import(...)"` 載入，`default.id === "opencode-mem-decision"`、`typeof default.setup === "function"`。
+
+> 註：`03:36:29` 有一次短暫的 `failed to load plugin`（`createPlugin` 匯入錯誤），發生在複製檔案與 `npm install` 之間的空窗；安裝完成後 reload 即恢復，屬已排除的暫時狀態。
+
+### 載入路徑
+
+實際載入的是全域副本，不是本 repo：
+
+```
+~/.config/opencode/plugins/opencode-mem-decision/
+```
+
+修改 repo 後必須同步 `index.js`、`package.json`、`package-lock.json`、`src/`，並在全域目錄執行 `npm install`。驗證方式：
+
+```sh
+opencode service restart
+opencode service status
+opencode api get /api/plugin | grep opencode-mem-decision
+grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
+```
+
+成功時只有 `loading plugin`，沒有 `failed to load plugin`；`memory` tool 會出現在工具清單。
+
+### 尚未接上
+
+- **Memory injection**：尚未註冊 `ctx.session.hook("prompt", ...)`。V2 的 `SessionPrompt` 只給 `prompt`（`PromptInput.Prompt`）與 `metadata`，與 `injectMemories({ sessionData, ... })` 期待的 `sessionData.messages` 形狀不合，需先確認可安全改寫 prompt 的方式；`src/inject.js` 目前沒有被 plugin 呼叫。
+- **`profile` mode**：仍是 stub。
+- **Web UI**：只有 REST API，尚無前端。
+- **多實例同時載入**：每個 opencode process 都會嘗試綁 `127.0.0.1:4747`，第二個實例會拿到 `EADDRINUSE`（只記 log、不影響載入）。若要多實例共用，需改成單一持有者或可設定的 port。
+
 ## 參考資源
 
-- 官方 Plugin docs: https://opencode.ai/docs/plugins/
+- 官方 Plugin docs (V2): https://opencode.ai/v2/docs/build/plugins
 - `opencode-mem` 原始碼: https://github.com/tickernelz/opencode-mem
 - Memwyre OpenCode Plugin: https://memwyre.tech/opencode-memory
 - OpenChamber Extensions: https://openchamber.dev/extensions/

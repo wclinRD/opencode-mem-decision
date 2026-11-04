@@ -78,6 +78,10 @@ export function createWebServer({ memoryConfig, storage }) {
   });
 
   const port = memoryConfig.webServerPort || 4747;
+  // A busy port must not crash the host process.
+  server.on("error", (error) => {
+    console.error(`OpenCode Memory web server error: ${error.message}`);
+  });
   server.listen(port, memoryConfig.webServerHost, () => {
     console.log(`OpenCode Memory web server listening on http://${memoryConfig.webServerHost}:${port}`);
   });

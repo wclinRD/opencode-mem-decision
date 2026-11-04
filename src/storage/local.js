@@ -1,8 +1,10 @@
 import fs from "fs/promises";
 import path from "path";
+import os from "os";
 import { redactCredentials } from "../security.js";
 
-const STORAGE_DIR = "~/.opencode-memory";
+const HOME_DIR = process.env.HOME || os.homedir() || "~";
+const STORAGE_DIR = path.join(HOME_DIR, ".opencode-memory");
 const MEMORIES_FILE = "memories.db.json";
 const KNOWLEDGE_FILE = "knowledge.db.json";
 

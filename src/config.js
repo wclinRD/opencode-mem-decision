@@ -39,7 +39,13 @@ const DEFAULT_CONFIG = {
 };
 
 export function loadConfig(userConfig = {}) {
-  return { ...DEFAULT_CONFIG, ...userConfig };
+  return {
+    ...DEFAULT_CONFIG,
+    ...userConfig,
+    chatMessage: { ...DEFAULT_CONFIG.chatMessage, ...(userConfig.chatMessage || {}) },
+    dreaming: { ...DEFAULT_CONFIG.dreaming, ...(userConfig.dreaming || {}) },
+    memory: { ...DEFAULT_CONFIG.memory, ...(userConfig.memory || {}) },
+  };
 }
 
 export function getMemoryBackend(config) {

@@ -12,6 +12,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@opencode-ai/plugin": "^1.0.0"
+    "@opencode/plugin": "^2.2.5"
   }
 }
