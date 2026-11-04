@@ -445,7 +445,15 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
   - `searchMemories` 新增 `vectorSearch: true`，使用餘弦相似度計算查詢向量與記憶向量，回傳符合門檻的向量檢索結果。
 - [x] `src/plugin.js`：初始化 `EmbeddingService` 並設定至 storage 層。
 - [x] 新增 `tests/embedding.test.js`（8 個測試）與 `tests/storage.test.js`（vector search 相關測試）。
-- [x] 測試總數：72 全部通過。
+- [x] 測試總數：73 全部通過。
+
+## Database Encryption at Rest（2026-11-04）
+
+- [x] 建立 `src/storage/encryption.js`，使用 `AES-256-GCM` 加密/解密 JSON 資料（衍生金鑰使用 `scrypt`，salt 儲存於 `encryption/salt.json`）。
+- [x] `src/config.js` 新增 `memory.encryption` 設定（`enabled`、`password`），預設未啟用。
+- [x] `src/storage/local.js`：在 `initEncryption` 讀取/建立 salt，計算 `encryptionKey`；`readJsonFile`/`writeJsonFile` 支援加密與未加密檔案的相容讀取。
+- [x] `src/plugin.js` 在 setup 時呼叫 `initEncryption`，確保加密層初始化。
+- [x] 測試：`tests/storage.test.js` 新增 `encryption stores and decrypts data`，成功儲存與解密加密記憶檔。
 
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 

@@ -42,6 +42,10 @@ const DEFAULT_CONFIG = {
       lowPriorityDays: 30,
       sensitiveDays: 365,
     },
+    encryption: {
+      enabled: false,
+      password: process.env.OPENCODE_MEM_PASSWORD || null,
+    },
   },
   webServerHost: "127.0.0.1",
   webServerPort: 56789,

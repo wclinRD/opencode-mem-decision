@@ -341,3 +341,19 @@ test("storage - searchMemories still works without embedding service", async () 
   const results = await localStorage.searchMemories("Search by tokens", { scope: "project" });
   assert.ok(results.some((m) => m.id === memory.id));
 });
+
+test("storage - encryption stores and decrypts data", async () => {
+  const { initEncryption } = await import("../src/storage/local.js");
+  await initEncryption({ memory: { encryption: { enabled: true, password: "test-password" } } });
+  try {
+    const memory = await localStorage.addMemory("Encrypted content", "project");
+    const raw = JSON.parse(await fs.readFile(path.join(TEST_DIR, "memories.db.json"), "utf8"));
+    assert.ok(raw.iv);
+    assert.ok(raw.data);
+    const search = await localStorage.searchMemories("Encrypted content", { scope: "project" });
+    assert.ok(search.some((m) => m.id === memory.id));
+  } finally {
+    await initEncryption({ memory: { encryption: { enabled: false } } });
+    setEmbeddingService(null);
+  }
+});

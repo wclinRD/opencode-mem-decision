@@ -3,8 +3,11 @@ import path from "path";
 import os from "os";
 import { EmbeddingService, cosineSimilarity } from "../embedding.js";
 import { redactCredentials } from "../security.js";
+import { deriveKey, encryptData, decryptData } from "./encryption.js";
+import { randomBytes } from "node:crypto";
 
 let currentEmbeddingService = null;
+let encryptionKey = null;
 
 export function setEmbeddingService(service) {
   currentEmbeddingService = service;
@@ -12,6 +15,33 @@ export function setEmbeddingService(service) {
 
 export function getEmbeddingService() {
   return currentEmbeddingService;
+}
+
+export async function initEncryption(config) {
+  const enc = config?.memory?.encryption;
+  if (!enc || enc.enabled !== true) return;
+  const password = enc.password;
+  if (!password) {
+    console.warn("[opencode-mem] encryption enabled but no password provided; generating random key in session");
+    encryptionKey = randomBytes(32);
+    return;
+  }
+  const saltPath = path.join(getStorageDir(), "encryption");
+  await ensureDir(saltPath);
+  let salt;
+  try {
+    const data = await fs.readFile(path.join(saltPath, "salt.json"), "utf8");
+    const parsed = JSON.parse(data);
+    salt = parsed.salt;
+  } catch (e) {
+    if (e.code === "ENOENT") {
+      salt = randomBytes(16).toString("base64");
+      await fs.writeFile(path.join(saltPath, "salt.json"), JSON.stringify({ salt }), "utf8");
+    } else {
+      throw e;
+    }
+  }
+  encryptionKey = await deriveKey(password, salt);
 }
 
 const HOME_DIR = process.env.HOME || os.homedir() || "~";
@@ -36,6 +66,13 @@ async function ensureDir(dir) {
 async function readJsonFile(filePath) {
   try {
     const data = await fs.readFile(filePath, "utf-8");
+    if (encryptionKey) {
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed === "object" && parsed.iv && parsed.data) {
+        const plaintext = decryptData(parsed, encryptionKey);
+        return JSON.parse(plaintext);
+      }
+    }
     return JSON.parse(data);
   } catch (e) {
     if (e.code === "ENOENT") return { memories: [], knowledge: [] };
@@ -44,7 +81,11 @@ async function readJsonFile(filePath) {
 }
 
 async function writeJsonFile(filePath, data) {
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+  let content = JSON.stringify(data, null, 2);
+  if (encryptionKey) {
+    content = JSON.stringify(encryptData(content, encryptionKey));
+  }
+  await fs.writeFile(filePath, content, "utf-8");
 }
 
 export async function addMemory(content, scope = "project", sessionId, metadata = {}) {

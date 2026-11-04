@@ -139,6 +139,10 @@ export default Plugin.define({
     const memoryConfig = loadConfig(ctx.options || {});
     const { localStorage } = await import("./storage/local.js");
 
+    // Initialize encryption if configured
+    const { initEncryption } = await import("./storage/local.js");
+    await initEncryption(memoryConfig);
+
     // Initialize embedding service
     const embeddingService = new EmbeddingService(memoryConfig);
     setEmbeddingService(embeddingService);

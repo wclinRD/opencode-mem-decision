@@ -38,16 +38,16 @@
 
 ### Step 5：高階記憶整合
 
-- [x] 實作 `EmbeddingService`，支援遠端 OpenAI 相容 API 與 Hugging Face Inference，以及本地 stub（固定維度 768）。
+- [x] 實作 `EmbeddingService`，支援遠端 OpenAI 相容 API、Hugging Face Inference，以及本地 stub（固定維度 768）。
 - [x] `src/storage/local.js` 在 `addMemory`、`updateMemory` 儲存 `embedding`，`searchMemories` 支援 `vectorSearch`（餘弦相似度）。
 - [x] `src/plugin.js` 初始化 embedding service 並註冊至 storage。
-- [x] 測試：82/82 通過（embedding.test.js + storage.test.js）。
+- [x] 建立 Database encryption at rest：在 `config.js` 加入 `memory.encryption`，`local.js` 使用 `AES-256-GCM` 加密/解密儲存檔（支援 salt 重現與未加密相容讀取）。
+- [x] 測試：73/73 通過（`embedding.test.js` 與 `storage.test.js` 包含加密測試）。
 
 - [ ] Markdown Vault backend。
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
 - [ ] Auto-Capture AI 提取 stub（provider structured output）。
 - [ ] User Profile 自動更新（每 N 個 prompts）。
-- [ ] Database encryption at rest（AES-256-GCM）。
 - [ ] Schema migrations & lock files。
 - [ ] Shared project memory via `.opencode-mem-project`。
 - [ ] Shared skills registry + REST API。
