@@ -1,3 +1,5 @@
+import { runDreaming, restoreTrashEntry } from "../dreaming.js";
+
 export function registerMemoryTools({ tools, storage, memoryConfig }) {
   tools.define("memory", {
     description: "Manage cross-session memories",
@@ -72,6 +74,20 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
         parameters: { fromPath: { type: "string", description: "Source path" } },
         handler: async ({ fromPath }) => {
           return storage.migrate(fromPath);
+        },
+      },
+      dream: {
+        description: "Run manual memory consolidation (dreaming)",
+        parameters: {},
+        handler: async () => {
+          return runDreaming({ memoryConfig, storage });
+        },
+      },
+      "restore-trash": {
+        description: "Restore a deleted memory from trash by id",
+        parameters: { id: { type: "string", description: "Trash entry id" } },
+        handler: async ({ id }) => {
+          return restoreTrashEntry(id);
         },
       },
     },

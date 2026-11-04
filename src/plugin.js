@@ -2,6 +2,9 @@ import { createPlugin } from "@opencode-ai/plugin";
 import { loadConfig } from "./config.js";
 import { registerMemoryTools, registerKnowledgeTools } from "./tools/memoryTools.js";
 import { createWebServer } from "./server.js";
+import { autoCapture } from "./capture.js";
+import { injectMemories, formatInjectedPrompt } from "./inject.js";
+import { runDreaming } from "./dreaming.js";
 
 const plugin = createPlugin({
   name: "opencode-mem-decision",
@@ -9,17 +12,39 @@ const plugin = createPlugin({
   async init({ config, session, storage, tools, events }) {
     const memoryConfig = loadConfig(config);
 
-    // Register session hooks
+    // Memory injection hook
     events.on("session.created", async (sessionData) => {
-      // Memory injection will be implemented in Phase 2
+      if (!memoryConfig.chatMessage?.enabled) return;
+      const injected = await injectMemories({ sessionData, memoryConfig, storage });
+      if (injected.length > 0) {
+        const prompt = formatInjectedPrompt(injected);
+        sessionData.injectedPrompt = prompt;
+      }
     });
 
+    events.on("session.updated", async (sessionData) => {
+      if (memoryConfig.chatMessage?.injectOn === "always") {
+        const injected = await injectMemories({ sessionData, memoryConfig, storage });
+        if (injected.length > 0) {
+          const prompt = formatInjectedPrompt(injected);
+          sessionData.injectedPrompt = prompt;
+        }
+      }
+    });
+
+    // Auto-capture hook
     events.on("session.idle", async (sessionData) => {
-      // Auto-capture will be implemented in Phase 2
+      const result = await autoCapture({ sessionData, memoryConfig, storage });
+      if (result.action === "add") console.log(`[mem-decision] captured memory ${result.id}`);
+      if (result.action === "update") console.log(`[mem-decision] updated memory ${result.id}`);
     });
 
+    // Compaction / dreaming hook
     events.on("experimental.session.compacting", async (sessionData) => {
-      // Compaction hook for memory consolidation
+      const result = await runDreaming({ memoryConfig, storage });
+      if (result.action === "dreamed" && result.count > 0) {
+        console.log(`[mem-decision] dreaming consolidated ${result.count} memories`);
+      }
     });
 
     // Register memory tools

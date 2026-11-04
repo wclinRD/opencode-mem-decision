@@ -22,18 +22,18 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 | hook: `session.idle` | ✅ Implemented | plugin skeleton 註冊 hook |
 | AI provider 提取技術決策 | 🔲 To Implement | provider 需支援 structured/tool-call output |
 | credential redaction | ✅ Implemented | 移除 GitHub token、OpenAI key、AWS key、Slack token、GCP key、PEM private key |
-| smart deduplication | 🔲 To Implement | 相似度比對避免重複 |
-| update-on-capture | 🔲 To Implement | 自動判斷 `add` / `update` / `supersede` |
+| smart deduplication | ✅ Implemented | simHash + Jaccard similarity |
+| update-on-capture | ✅ Implemented | 自動判斷 `add` / `update` / `supersede` |
 
 ### 3. Memory Injection（自動注入）
 
 | 項目 | 狀態 | 說明 |
 | --- | --- | --- |
 | hooks: `session.created`, `session.updated` | ✅ Implemented | plugin skeleton 註冊 hooks |
-| recall modes: relevant/recent/both | 🔲 To Implement | vector search 或 recent N 筆 |
+| recall modes: relevant/recent/both | ✅ Implemented | vector search 或 recent N 筆 |
 | compaction hook: `experimental.session.compacting` | ✅ Implemented | 已註冊 |
-| injection markers | 🔲 To Implement | 標記 injected blocks |
-| filter injected prompts | 🔲 To Implement | 跳過 system reminders、orchestration directives |
+| injection markers | ✅ Implemented | 標記 injected blocks |
+| filter injected prompts | ✅ Implemented | 跳過 system reminders、orchestration directives |
 
 ### 4. Manual Memory Tools（自訂 tool）
 
@@ -63,10 +63,10 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 
 | 項目 | 狀態 | 說明 |
 | --- | --- | --- |
-| background pass 找 related memories | 🔲 To Implement | |
-| AI 判斷：merge/update/supersede/keep/flag | 🔲 To Implement | |
-| soft-delete 進 trash（可還原） | 🔲 To Implement | |
-| cross-project dreaming 支援 | 🔲 To Implement | |
+| background pass 找 related memories | ✅ Implemented | via `experimental.session.compacting` hook |
+| AI 判斷：merge/update/supersede/keep/flag | ✅ Implemented | similarity based decision |
+| soft-delete 進 trash（可還原） | ✅ Implemented | trash.db.json, restore-trash tool |
+| cross-project dreaming 支援 | ✅ Implemented | all-projects scope |
 
 ### 7. Web UI
 

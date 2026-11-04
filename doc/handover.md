@@ -181,30 +181,30 @@ OpenCode Memory Plugin 提供跨會話的持久化記憶系統，讓 AI coding a
 ### 已完成 (Implemented)
 
 1. **Plugin skeleton**：`src/plugin.js` 載入 config，註冊 `session.created`, `session.idle`, `experimental.session.compacting` hooks。
-2. **Basic tools**：`memory` (add/search/list/profile/forget/export/import/migrate/list-shards) 與 `knowledge` (list/show/save/delete)。
-3. **Basic storage**：JSON file based storage (`memories.db.json`, `knowledge.db.json`)。
-4. **Web server scaffolding**：`src/server.js` with `GET /api/memory`, `GET /api/knowledge`, `GET /api/stats`, basic auth pattern。
-5. **Config interface**：`src/config.js` 已包含 `chatMessage`, `dreaming`, `webServerPort`, `updateOnCapture*`, `knowledgeEnabled`。
-6. **Credential redaction**：`src/security.js` 實作移除 GitHub token、OpenAI key、AWS key、Slack token、GCP key、PEM private key。
-7. **Storage interface**：`src/storage/local.js` 提供 add/search/list/delete/export/import介面。
-8. **Unit tests**：`tests/security.test.js` 覆蓋 credential redaction。
+2. **Basic tools**：`memory` (add/search/list/profile/forget/export/import/migrate/list-shards/dream/restore-trash) 與 `knowledge` (list/show/save/delete)。
+3. **Basic storage**：JSON file based storage (`memories.db.json`, `knowledge.db.json`, `trash.db.json`)。
+4. **Web server scaffolding**：`src/server.js` with `GET /api/memory`, `GET /api/knowledge`, `GET /api/stats`, basic auth pattern.
+5. **Config interface**：`src/config.js` 已包含 `chatMessage`, `dreaming`, `webServerPort`, `updateOnCapture*`, `knowledgeEnabled`.
+6. **Credential redaction**：`src/security.js` 實作移除 GitHub token、OpenAI key、AWS key、Slack token、GCP key、PEM private key.
+7. **Storage interface**：`src/storage/local.js` 提供 add/search/list/delete/export/import 介面.
+8. **Auto-Capture core**：`src/capture.js` 實作 simHash + Jaccard similarity, smart deduplication, update-on-capture.
+9. **Memory Injection**：`src/inject.js` 實作 relevant/recent/both recall modes, injection markers, filter injected prompts.
+10. **Dreaming**：`src/dreaming.js` 實作 merge/supersede/update decisions, soft-delete to trash, restore-trash tool.
+11. **Unit tests**：`tests/security.test.js`, `tests/capture.test.js` 覆蓋 credential redaction 與 similarity.
 
 ### 未完成 (To Implement)
 
-1. **libSQL/Turso Local Vector DB**：實作 vector search，`F32_BLOB` cosine distance。
-2. **Markdown Vault backend**：Obsidian/Raneto 相容 `.md` 檔案。
-3. **Remote API backend**：OpenAI-compatible embeddings endpoint。
-4. **Auto-Capture core**：AI provider 提取技術決策、bug 解決、架構選擇；credential redaction 已完成但 AI extraction stub。
-5. **Smart deduplication & update-on-capture**。
-6. **Memory Injection 完整邏輯**：relevant/recent/both recall modes。
-7. **Dreaming (memory consolidation)**：merge/update/supersede/keep/flag，soft-delete 進 trash。
-8. **User Profile logic**：每 N 個 prompts 自動更新。
-9. **Database encryption at rest (AES-256-GCM)**。
-10. **Schema migrations & lock files**。
-11. **Shared project memory via `.opencode-mem-project` marker file**。
-12. **Shared skills registry + REST API**。
-13. **Web UI (React/Vite)**。
-14. **Integration/E2E tests**。
+1. **libSQL/Turso Local Vector DB**：實作 vector search，`F32_BLOB` cosine distance.
+2. **Markdown Vault backend**：Obsidian/Raneto 相容 `.md` 檔案.
+3. **Remote API backend**：OpenAI-compatible embeddings endpoint.
+4. **Auto-Capture AI extraction stub**：provider 需支援 structured/tool-call output.
+5. **User Profile logic**：每 N 個 prompts 自動更新.
+6. **Database encryption at rest (AES-256-GCM)**.
+7. **Schema migrations & lock files**.
+8. **Shared project memory via `.opencode-mem-project` marker file**.
+9. **Shared skills registry + REST API**.
+10. **Web UI (React/Vite)**.
+11. **Integration/E2E tests**.
 
 ## 已知限制
 
