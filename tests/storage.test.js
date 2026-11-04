@@ -234,3 +234,63 @@ test("storage - searchMemories excludes expired by default", async () => {
   const ttlDaysSearch = await localStorage.searchMemories("Search expired fact", { scope: "project", ttlDays: 300 });
   assert.equal(ttlDaysSearch.length, 1);
 });
+
+test("storage - updateMemory preserves existing metadata when not provided", async () => {
+  const memory = await localStorage.addMemory("To update content", "project", undefined, {
+    type: "fact",
+    confidence: 0.7,
+    priority: 1,
+    sensitive: true,
+    tags: ["test"],
+  });
+
+  await localStorage.updateMemory(memory.id, { content: "Updated content" });
+
+  const updated = await localStorage.getMemory(memory.id);
+  assert.equal(updated.content, "Updated content");
+  assert.equal(updated.type, "fact");
+  assert.equal(updated.confidence, 0.7);
+  assert.equal(updated.priority, 1);
+  assert.equal(updated.sensitivity, "sensitive");
+  assert.deepEqual(updated.tags, ["test"]);
+});
+
+test("storage - updateMemory updates metadata fields", async () => {
+  const memory = await localStorage.addMemory("To update metadata", "project", undefined, {
+    type: "fact",
+    confidence: 0.6,
+    priority: 1,
+    sensitive: false,
+    tags: ["initial"],
+  });
+
+  await localStorage.updateMemory(memory.id, {
+    type: "preference",
+    confidence: 0.9,
+    priority: 0,
+    sensitive: true,
+    tags: ["updated"],
+    content: "New content",
+  });
+
+  const updated = await localStorage.getMemory(memory.id);
+  assert.equal(updated.content, "New content");
+  assert.equal(updated.type, "preference");
+  assert.equal(updated.confidence, 0.9);
+  assert.equal(updated.priority, 0);
+  assert.equal(updated.sensitivity, "sensitive");
+  assert.deepEqual(updated.tags, ["updated"]);
+});
+
+test("storage - updateMemory preserves id and original createdAt when not changed", async () => {
+  const memory = await localStorage.addMemory("To update content but keep id and createdAt", "project");
+
+  await localStorage.updateMemory(memory.id, { content: "New content" });
+
+  const updated = await localStorage.getMemory(memory.id);
+  assert.equal(updated.id, memory.id);
+  assert.equal(updated.createdAt, memory.createdAt);
+  const updatedAtMs = Date.parse(updated.updatedAt);
+  const createdAtMs = Date.parse(updated.createdAt);
+  assert.ok(updatedAtMs >= createdAtMs);
+});

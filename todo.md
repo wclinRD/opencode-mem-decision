@@ -22,9 +22,10 @@
 
 ### Step 3：更新記憶時保留元數據
 
-- [ ] `autoCapture` updateOnCapture 時保留 `type`、`confidence`、`tags`、`priority`。
-- [ ] `storage/local.js::updateMemory` 支持元數據更新。
-- [ ] 補單元測試。
+- [x] `autoCapture` updateOnCapture 時保留 `type`、`confidence`、`tags`、`priority`。
+- [x] `storage/local.js::updateMemory` 支持元數據更新（type/confidence/priority/sensitive/tags）並保留未提供字段。
+- [x] 新增 `memory.update` tool，支援更新 content/scope/metadata。
+- [x] 補單元測試：`updateMemory preserves existing metadata when not provided`、`updateMemory updates metadata fields`、`updateMemory preserves id and original createdAt when not changed`。
 
 ### Step 4：記憶管理工具進階功能
 

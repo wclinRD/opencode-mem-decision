@@ -132,7 +132,11 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     const existing = await storage.getMemory(dedup.existingId);
     await storage.updateMemory(dedup.existingId, {
       content: redactCredentials(filtered),
-      updatedAt: new Date().toISOString(),
+      type: classified.type,
+      confidence: classified.confidence,
+      priority: classified.priority,
+      sensitive: classified.sensitive,
+      tags: classified.tags,
     });
     return { action: "update", id: dedup.existingId, similarity: dedup.similarity };
   }

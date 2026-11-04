@@ -217,7 +217,26 @@ export async function updateMemory(id, updates) {
   const memory = db.memories.find((m) => m.id === id);
   if (!memory) return null;
 
-  Object.assign(memory, updates, { updatedAt: new Date().toISOString() });
+  const allowedFields = ["content", "scope", "sessionId", "type", "confidence", "priority", "tags", "sensitive", "sensitivity", "createdAt", "updatedAt"];
+  for (const key of allowedFields) {
+    if (key in updates) {
+      if (key === "sensitive" || key === "sensitivity") {
+        memory.sensitivity = updates[key] === true ? "sensitive" : "normal";
+      } else if (key === "confidence") {
+        memory.confidence = Number.isFinite(updates[key]) ? Number(updates[key]) : memory.confidence;
+      } else if (key === "priority") {
+        memory.priority = Number.isFinite(updates[key]) ? Number(updates[key]) : memory.priority;
+      } else if (key === "tags") {
+        memory.tags = Array.isArray(updates[key]) ? updates[key] : memory.tags;
+      } else if (key === "type") {
+        memory.type = String(updates[key]);
+      } else {
+        memory[key] = updates[key];
+      }
+    }
+  }
+
+  Object.assign(memory, { updatedAt: new Date().toISOString() });
   await writeJsonFile(filePath, db);
   return memory;
 }

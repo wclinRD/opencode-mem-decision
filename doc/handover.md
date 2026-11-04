@@ -414,6 +414,14 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `server.js`, `plugin.js`, `inject.js`, `capture.js`, `dreaming.js`, `profile.js`：全面採用 TTL-aware 查詢。
 - [x] 測試：58/58 通過，包含 TTL helper、cleanup、search TTL filter。
 
+## 記憶更新元數據保留機制 (2026-11-04)
+
+- [x] `storage/local.js::updateMemory`：支援更新 `type`、`confidence`、`priority`、`sensitive/sensitivity`、`tags`，保留未提供的既有元數據，且 `id`/`createdAt` 不受用戶更新影響。
+- [x] `capture.js`：`autoCapture` 在 updateOnCapture 時更新記憶元數據（`type`, `confidence`, `priority`, `sensitive`, `tags`）。
+- [x] `memoryTools.js`：新增 `memory.update` 工具，支援更新 `id`, `content`, `scope`, `metadata`。
+- [x] `plugin.js`：增加 `mode === "update"` 處理。
+- [x] 測試：70/70 通過，包含 `updateMemory preserves existing metadata when not provided`、`updateMemory updates metadata fields`、`updateMemory preserves id and original createdAt when not changed`。
+
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
 ## 下一步

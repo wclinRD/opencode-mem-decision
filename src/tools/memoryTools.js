@@ -96,6 +96,26 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
           return storage.cleanupExpiredMemories(memoryConfig);
         },
       },
+      update: {
+        description: "Update an existing memory by id",
+        parameters: {
+          id: { type: "string", description: "Memory id" },
+          content: { type: "string", description: "New content (optional)" },
+          scope: { type: "string", description: "New scope (optional)" },
+          metadata: { type: "object", description: "Metadata fields to update: type, confidence, priority, sensitive/sensitivity, tags (optional)" },
+        },
+        handler: async ({ id, content, scope, metadata }) => {
+          const updates = { ...(content && { content }), ...(scope && { scope }) };
+          if (metadata) {
+            if ("type" in metadata) updates.type = metadata.type;
+            if ("confidence" in metadata) updates.confidence = metadata.confidence;
+            if ("priority" in metadata) updates.priority = metadata.priority;
+            if ("sensitive" in metadata || "sensitivity" in metadata) updates.sensitive = metadata.sensitive ?? metadata.sensitivity;
+            if ("tags" in metadata) updates.tags = metadata.tags;
+          }
+          return storage.updateMemory(id, updates);
+        },
+      },
       dream: {
         description: "Run manual memory consolidation (dreaming)",
         parameters: {},

@@ -87,6 +87,17 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
       sensitive: classified.sensitive,
     });
   }
+  if (mode === "update") {
+    const updates = { ...(args.content && { content: args.content }), ...(args.scope && { scope: args.scope }) };
+    if (args.metadata) {
+      if (args.metadata.type !== undefined) updates.type = args.metadata.type;
+      if (args.metadata.confidence !== undefined) updates.confidence = args.metadata.confidence;
+      if (args.metadata.priority !== undefined) updates.priority = args.metadata.priority;
+      if (args.metadata.sensitive !== undefined || args.metadata.sensitivity !== undefined) updates.sensitive = args.metadata.sensitive ?? args.metadata.sensitivity;
+      if (args.metadata.tags !== undefined) updates.tags = args.metadata.tags;
+    }
+    return storage.updateMemory(args.id, updates);
+  }
   if (mode === "search") return storage.searchMemories(args.query, { scope: args.scope || "default", includeExpired: args.includeExpired !== true, ttlDays: args.ttlDays });
   if (mode === "list") return storage.listMemories(args.limit || 50, args.scope || "default", memoryConfig);
   if (mode === "profile") return buildProfile({ storage, memoryConfig });
