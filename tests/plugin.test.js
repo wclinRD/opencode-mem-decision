@@ -232,7 +232,7 @@ test("system - root route serves static UI", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/html/);
   const body = await response.text();
-  assert.match(body, /OpenCode Memory Manager/);
+  assert.match(body, /OpenCode Memory Decision/);
 
   await cleanup();
 });
