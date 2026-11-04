@@ -19,9 +19,11 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
         parameters: {
           query: { type: "string", description: "Search query" },
           scope: { type: "string", description: "Memory scope", default: "default" },
+          ttlDays: { type: "number", description: "Optional TTL days filter; if omitted, use memory type TTL" },
+          includeExpired: { type: "boolean", description: "Include expired memories despite TTL", default: false },
         },
-        handler: async ({ query, scope = "default" }) => {
-          return storage.searchMemories(query, scope);
+        handler: async ({ query, scope = "default", ttlDays, includeExpired }) => {
+          return storage.searchMemories(query, { scope, ttlDays, includeExpired });
         },
       },
       list: {
@@ -31,7 +33,7 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
           scope: { type: "string", description: "Memory scope", default: "default" },
         },
         handler: async ({ limit = 50, scope = "default" }) => {
-          return storage.listMemories(limit, scope);
+          return storage.listMemories(limit, scope, memoryConfig);
         },
       },
       profile: {
@@ -74,6 +76,24 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
         parameters: { fromPath: { type: "string", description: "Source path" } },
         handler: async ({ fromPath }) => {
           return storage.migrate(fromPath);
+        },
+      },
+      "cleanup-expired": {
+        description: "Delete expired memories based on TTL rules",
+        parameters: {
+          dryRun: { type: "boolean", description: "If true, only return expired memories without deleting", default: false },
+        },
+        handler: async ({ dryRun = false }) => {
+          if (dryRun) {
+            const allMemories = await storage.listAllMemories();
+            const expired = allMemories.filter((m) => {
+              const ttlDays = storage.getTtlDaysForMemory(m, memoryConfig);
+              const cutoff = new Date(Date.now() - ttlDays * 86400000).toISOString();
+              return m.createdAt < cutoff;
+            });
+            return { expired, count: expired.length, deletedCount: 0 };
+          }
+          return storage.cleanupExpiredMemories(memoryConfig);
         },
       },
       dream: {

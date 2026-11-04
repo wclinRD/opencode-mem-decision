@@ -1,4 +1,5 @@
 import { searchMemories, listMemories } from "./storage/local.js";
+import { loadConfig } from "./config.js";
 
 export const INJECTION_MARKER = "<!-- opencode-mem-decision:injected -->";
 
@@ -36,17 +37,19 @@ export async function injectMemories({ sessionData, memoryConfig, storage, conte
 
   if (recallMode === "relevant" || recallMode === "both") {
     const query = sessionData?.latestMessage || sessionData?.messages?.slice(-1)?.[0]?.content || "";
-    const filters = { scope: recallScope };
+    const defaultConfig = loadConfig();
+    const filters = { scope: recallScope, includeExpired: false };
     candidates = await searchMemories(query, filters);
 
     // Default recall must still do something when nothing is relevant.
     if (recallMode === "relevant" && candidates.length === 0) {
-      candidates = await listMemories(maxMemories * 2, recallScope);
+      candidates = await listMemories(maxMemories * 2, recallScope, defaultConfig);
     }
   }
 
   if (recallMode === "recent" || (recallMode === "both" && candidates.length < maxMemories)) {
-    const recent = await listMemories(maxMemories * 2, recallScope);
+    const defaultConfig = loadConfig();
+    const recent = await listMemories(maxMemories * 2, recallScope, defaultConfig);
     const relevantIds = new Set(candidates.map((m) => m.id));
     const recentUnique = recent.filter((m) => !relevantIds.has(m.id));
     candidates = [...candidates, ...recentUnique].slice(0, maxMemories);

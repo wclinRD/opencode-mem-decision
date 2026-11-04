@@ -3,6 +3,7 @@ import { searchMemories } from "./storage/local.js";
 import { stripInjectedBlock } from "./inject.js";
 import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory as defaultClassifyMemory } from "./classify.js";
+import { loadConfig } from "./config.js";
 
 const simHash = (text) => {
   const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
@@ -123,7 +124,8 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     related_memory_ids: [],
   });
 
-  const existingMemories = await storage.listMemories(1000);
+  const defaultConfig = loadConfig();
+  const existingMemories = await storage.listMemories(1000, "default", defaultConfig);
   const dedup = isDuplicate(filtered, existingMemories, memoryConfig.updateOnCaptureSimilarityThreshold || 0.75);
 
   if (dedup.duplicate && memoryConfig.updateOnCaptureEnabled) {

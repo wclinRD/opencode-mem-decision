@@ -6,6 +6,7 @@ import { localStorage } from "./storage/local.js";
 import { buildProfile } from "./profile.js";
 import { runDreaming } from "./dreaming.js";
 import { summarizeRecentEvents } from "./eventLog.js";
+import { loadConfig } from "./config.js";
 
 const UI_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "static", "ui.html");
 
@@ -69,14 +70,16 @@ export function createWebServer({ memoryConfig, storage }) {
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(html);
       } else if (path === "/api/memory" && method === "GET") {
-        sendJson(res, 200, await storage.listMemories());
+        const defaultConfig = loadConfig();
+        sendJson(res, 200, await storage.listMemories(undefined, "default", defaultConfig));
       } else if (path === "/api/knowledge" && method === "GET") {
         sendJson(res, 200, await storage.listKnowledge());
       } else if (path.match(/^\/api\/knowledge\/[^/]+$/) && method === "DELETE") {
         const id = path.split("/").pop();
         sendJson(res, 200, { deleted: await storage.deleteKnowledge(id) });
       } else if (path === "/api/stats" && method === "GET") {
-        const memories = await storage.listMemories(10000);
+        const defaultConfig = loadConfig();
+        const memories = await storage.listMemories(10000, "default", defaultConfig);
         sendJson(res, 200, {
           memories: memories.length,
           knowledge: (await storage.listKnowledge()).length,
@@ -88,10 +91,14 @@ export function createWebServer({ memoryConfig, storage }) {
         const type = url.searchParams.get("type") || "all";
         const confidence = url.searchParams.get("confidence");
         const timeRange = url.searchParams.get("timeRange");
+        const ttlDays = url.searchParams.get("ttlDays");
+        const includeExpired = url.searchParams.get("includeExpired") === "true";
         const filters = { scope };
         if (type !== "all") filters.type = type;
         if (confidence) filters.confidence = Number(confidence);
         if (timeRange) filters.timeRange = Number(timeRange);
+        if (ttlDays) filters.ttlDays = Number(ttlDays);
+        filters.includeExpired = includeExpired;
         sendJson(res, 200, await storage.searchMemories(query, filters));
       } else if (path === "/api/events/summary" && method === "GET") {
         const hours = url.searchParams.get("hours") || 24;

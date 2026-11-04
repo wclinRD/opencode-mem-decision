@@ -149,3 +149,88 @@ test("storage - dreaming trash round-trip uses the temp dir", async () => {
   const restored = await restoreTrashEntry(trash.entries[0].id);
   assert.deepEqual(restored, { restored: true });
 });
+
+test("storage - getTtlDaysForMemory respects type, priority, sensitivity", () => {
+  const defaultConfig = {
+    memory: {
+      ttl: { defaultDays: 90, factDays: 180, lowPriorityDays: 30, sensitiveDays: 365 },
+    },
+  };
+  const factMem = { type: "fact", priority: 1, sensitivity: "normal", createdAt: "..." };
+  const sensitiveMem = { type: "fact", priority: 1, sensitivity: "sensitive", createdAt: "..." };
+  const lowPriorityMem = { type: "fact", priority: 0, sensitivity: "normal", createdAt: "..." };
+  assert.equal(localStorage.getTtlDaysForMemory(factMem, defaultConfig), 180);
+  assert.equal(localStorage.getTtlDaysForMemory(sensitiveMem, defaultConfig), 365);
+  assert.equal(localStorage.getTtlDaysForMemory(lowPriorityMem, defaultConfig), 30);
+});
+
+test("storage - cleanupExpiredMemories removes expired memories", async () => {
+  const config = {
+    memory: {
+      ttl: { defaultDays: 90, factDays: 180, lowPriorityDays: 30, sensitiveDays: 365 },
+    },
+  };
+  const now = new Date();
+  const oldDate = new Date(now.getTime() - 200 * 86400000).toISOString();
+  const recentDate = new Date(now.getTime() - 10 * 86400000).toISOString();
+
+  await localStorage.addMemory("Old expired fact", "project", undefined, {
+    type: "fact", confidence: 0.5, priority: 1, sensitivity: "normal",
+  });
+  await localStorage.addMemory("Recent fact", "project", undefined, {
+    type: "fact", confidence: 0.5, priority: 1, sensitivity: "normal",
+  });
+  await localStorage.addMemory("Low priority old fact", "project", undefined, {
+    type: "fact", confidence: 0.5, priority: 0, sensitivity: "normal",
+  });
+  await localStorage.addMemory("Sensitive old", "project", undefined, {
+    type: "fact", confidence: 0.5, priority: 1, sensitive: true,
+  });
+
+  // Overwrite createdAt to simulate old memories
+  const allBefore = await localStorage.listAllMemories();
+  for (const m of allBefore) {
+    if (m.content === "Old expired fact") {
+      await localStorage.updateMemory(m.id, { createdAt: oldDate, updatedAt: oldDate });
+    } else if (m.content === "Recent fact") {
+      await localStorage.updateMemory(m.id, { createdAt: recentDate, updatedAt: recentDate });
+    } else if (m.content === "Low priority old fact") {
+      await localStorage.updateMemory(m.id, { createdAt: oldDate, updatedAt: oldDate });
+    } else if (m.content === "Sensitive old") {
+      await localStorage.updateMemory(m.id, { createdAt: oldDate, updatedAt: oldDate });
+    }
+  }
+
+  const result = await localStorage.cleanupExpiredMemories(config);
+  assert.equal(result.deletedCount, 2); // old fact and old low priority
+  assert.equal(result.deletedIds.length, 2);
+
+  const remaining = await localStorage.listAllMemories();
+  const remainingContents = remaining.map((m) => m.content);
+  assert.ok(remainingContents.includes("Recent fact"));
+  assert.ok(remainingContents.includes("Sensitive old"));
+});
+
+test("storage - searchMemories excludes expired by default", async () => {
+  const config = {
+    memory: {
+      ttl: { defaultDays: 90, factDays: 180, lowPriorityDays: 30, sensitiveDays: 365 },
+    },
+  };
+  const now = new Date();
+  const oldDate = new Date(now.getTime() - 200 * 86400000).toISOString();
+
+  const mem = await localStorage.addMemory("Search expired fact", "project", undefined, {
+    type: "fact", confidence: 0.5, priority: 1, sensitivity: "normal",
+  });
+  await localStorage.updateMemory(mem.id, { createdAt: oldDate, updatedAt: oldDate });
+
+  const defaultSearch = await localStorage.searchMemories("Search expired fact", { scope: "project" });
+  assert.equal(defaultSearch.length, 0); // expired by default
+
+  const includeExpiredSearch = await localStorage.searchMemories("Search expired fact", { scope: "project", includeExpired: true });
+  assert.equal(includeExpiredSearch.length, 1);
+
+  const ttlDaysSearch = await localStorage.searchMemories("Search expired fact", { scope: "project", ttlDays: 300 });
+  assert.equal(ttlDaysSearch.length, 1);
+});

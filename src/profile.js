@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { getStorageDir } from "./storage/local.js";
 import { redactCredentials } from "./security.js";
+import { loadConfig } from "./config.js";
 
 const PROFILE_FILE = "profile.json";
 const RECENT_LIMIT = 10;
@@ -66,7 +67,8 @@ export async function buildProfile({ storage }) {
   const existing = await readProfileFile();
   const promptCount = Number.isInteger(existing?.promptCount) ? existing.promptCount : 0;
 
-  const memories = await storage.listMemories(10000, "default");
+  const defaultConfig = loadConfig();
+  const memories = await storage.listMemories(10000, "default", defaultConfig);
   const knowledge = await storage.listKnowledge();
 
   const scopes = {};

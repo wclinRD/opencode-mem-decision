@@ -3,6 +3,7 @@ import path from "path";
 import { listMemories, updateMemory, deleteMemory, addMemory, getStorageDir } from "./storage/local.js";
 import { calculateSimilarity } from "./capture.js";
 import { redactCredentials } from "./security.js";
+import { loadConfig } from "./config.js";
 
 const TRASH_FILE = "trash.db.json";
 
@@ -30,7 +31,8 @@ export async function runDreaming({ memoryConfig, storage }) {
   if (!memoryConfig.dreaming?.enabled) return { action: "skipped", reason: "dreaming disabled" };
 
   const relatedThreshold = memoryConfig.dreaming.relatedThreshold || 0.75;
-  const memories = await listMemories(1000, "default");
+  const defaultConfig = loadConfig();
+  const memories = await listMemories(1000, "default", defaultConfig);
   const trash = await readTrash();
   let actions = [];
 

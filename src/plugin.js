@@ -87,8 +87,8 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
       sensitive: classified.sensitive,
     });
   }
-  if (mode === "search") return storage.searchMemories(args.query, args.scope || "default");
-  if (mode === "list") return storage.listMemories(args.limit || 50, args.scope || "default");
+  if (mode === "search") return storage.searchMemories(args.query, { scope: args.scope || "default", includeExpired: args.includeExpired !== true, ttlDays: args.ttlDays });
+  if (mode === "list") return storage.listMemories(args.limit || 50, args.scope || "default", memoryConfig);
   if (mode === "profile") return buildProfile({ storage, memoryConfig });
   if (mode === "forget") return storage.deleteMemory(args.id);
   if (mode === "export") return storage.exportMemories(args.outputPath);

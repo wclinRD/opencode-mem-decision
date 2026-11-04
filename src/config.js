@@ -36,6 +36,12 @@ const DEFAULT_CONFIG = {
   opencodeModel: "claude-haiku-4-5-20251001",
   memory: {
     defaultScope: "project",
+    ttl: {
+      defaultDays: 90,
+      factDays: 180,
+      lowPriorityDays: 30,
+      sensitiveDays: 365,
+    },
   },
   webServerHost: "127.0.0.1",
   webServerPort: 56789,

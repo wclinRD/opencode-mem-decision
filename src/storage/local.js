@@ -63,6 +63,43 @@ function tokenize(text) {
   return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
 }
 
+export function getTtlDaysForMemory(memory, config) {
+  const defaultDays = config?.memory?.ttl?.defaultDays || 90;
+  const factDays = config?.memory?.ttl?.factDays || 180;
+  const lowPriorityDays = config?.memory?.ttl?.lowPriorityDays || 30;
+  const sensitiveDays = config?.memory?.ttl?.sensitiveDays || 365;
+
+  if (memory.sensitivity === "sensitive") {
+    return Math.max(defaultDays, sensitiveDays);
+  }
+  if (memory.priority === 0) {
+    return Math.min(defaultDays, lowPriorityDays);
+  }
+  if (memory.type === "fact") {
+    return factDays;
+  }
+  return defaultDays;
+}
+
+export async function cleanupExpiredMemories(config) {
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+
+  const deletedIds = [];
+  db.memories = db.memories.filter((memory) => {
+    const ttlDays = getTtlDaysForMemory(memory, config);
+    const cutoff = new Date(Date.now() - ttlDays * 86400000).toISOString();
+    if (memory.createdAt < cutoff) {
+      deletedIds.push(memory.id);
+      return false;
+    }
+    return true;
+  });
+
+  await writeJsonFile(filePath, db);
+  return { deletedCount: deletedIds.length, deletedIds };
+}
+
 export async function searchMemories(query, filters = {}) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -74,6 +111,16 @@ export async function searchMemories(query, filters = {}) {
   const timeRange = filters.timeRange;
 
   let scoped = db.memories.filter((m) => effectiveScope === "default" || m.scope === effectiveScope);
+
+  // TTL filter by default unless explicitly includeExpired: true
+  if (filters.includeExpired !== true) {
+    const ttlDaysFilter = typeof filters.ttlDays === "number" ? filters.ttlDays : null;
+    scoped = scoped.filter((memory) => {
+      const ttlDays = ttlDaysFilter !== null ? ttlDaysFilter : getTtlDaysForMemory(memory, {});
+      const cutoff = new Date(Date.now() - ttlDays * 86400000).toISOString();
+      return memory.createdAt >= cutoff;
+    });
+  }
 
   if (typeFilter) scoped = scoped.filter((m) => m.type === typeFilter);
   if (confidenceFilter && typeof confidenceFilter === "number") {
@@ -106,12 +153,22 @@ export async function searchMemories(query, filters = {}) {
     .map((entry) => entry.memory);
 }
 
-export async function listMemories(limit = 50, scope = "default") {
+export async function listAllMemories() {
+  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+  return db.memories || [];
+}
+
+export async function listMemories(limit = 50, scope = "default", ttlConfig = {}) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
   return db.memories
     .filter((m) => scope === "default" || m.scope === scope)
+    .filter((memory) => {
+      const cutoff = new Date(Date.now() - getTtlDaysForMemory(memory, ttlConfig) * 86400000).toISOString();
+      return memory.createdAt >= cutoff;
+    })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, limit);
 }
@@ -246,6 +303,7 @@ export async function deleteKnowledge(id) {
 export const localStorage = {
   addMemory,
   searchMemories,
+  listAllMemories,
   listMemories,
   getMemory,
   deleteMemory,
@@ -259,4 +317,6 @@ export const localStorage = {
   listKnowledge,
   getKnowledge,
   deleteKnowledge,
+  cleanupExpiredMemories,
+  getTtlDaysForMemory,
 };
