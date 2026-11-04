@@ -83,6 +83,25 @@
       flex: 1;
       padding: 24px 32px;
     }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .tab.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
     @media (max-width: 768px) {
       .app-header { padding: 16px 20px; }
       .app-title { font-size: 18px; }
@@ -220,6 +239,11 @@
       padding: 32px 0;
       text-align: center;
     }
+    .section-title {
+      margin: 24px 0 12px;
+      font-size: 18px;
+      font-weight: 600;
+    }
     textarea {
       min-height: 80px;
       resize: vertical;
@@ -266,34 +290,46 @@
   </header>
 
   <main class="main">
-    <form id="addForm" class="form-card">
-      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:end;">
-        <div class="field" style="flex:1 1 300px;">
-          <label for="content">Content</label>
-          <textarea id="content" name="content" required placeholder="Memory content..."></textarea>
-        </div>
-        <div class="field">
-          <label for="scope">Scope</label>
-          <input id="scope" name="scope" value="project" placeholder="scope (default: project)" />
-        </div>
-        <button type="submit" class="primary">Add Memory</button>
-      </div>
-    </form>
-
-    <div class="controls search-controls">
-      <input id="searchInput" type="text" placeholder="Search memories..." />
-      <select id="scopeFilter">
-        <option value="all">All scopes</option>
-      </select>
-      <select id="sortSelect">
-        <option value="desc">Newest first</option>
-        <option value="asc">Oldest first</option>
-      </select>
-      <button id="searchButton" class="secondary">Search</button>
-      <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
+    <div class="tabs" id="viewTabs">
+      <button class="tab active" data-view="memories">Memories</button>
+      <button class="tab" data-view="knowledge">Knowledge</button>
     </div>
 
-    <div id="memoryList" class="grid"></div>
+    <div id="memoriesView">
+      <form id="addForm" class="form-card">
+        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:end;">
+          <div class="field" style="flex:1 1 300px;">
+            <label for="content">Content</label>
+            <textarea id="content" name="content" required placeholder="Memory content..."></textarea>
+          </div>
+          <div class="field">
+            <label for="scope">Scope</label>
+            <input id="scope" name="scope" value="project" placeholder="scope (default: project)" />
+          </div>
+          <button type="submit" class="primary">Add Memory</button>
+        </div>
+      </form>
+
+      <div class="controls search-controls">
+        <input id="searchInput" type="text" placeholder="Search memories..." />
+        <select id="scopeFilter">
+          <option value="all">All scopes</option>
+        </select>
+        <select id="sortSelect">
+          <option value="desc">Newest first</option>
+          <option value="asc">Oldest first</option>
+        </select>
+        <button id="searchButton" class="secondary">Search</button>
+        <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
+      </div>
+
+      <div id="memoryList" class="grid"></div>
+    </div>
+
+    <div id="knowledgeView" style="display: none;">
+      <h2 class="section-title">Knowledge</h2>
+      <div id="knowledgeList" class="grid"></div>
+    </div>
   </main>
 
   <div id="toastContainer" class="toast-container"></div>
@@ -458,8 +494,79 @@
       }
     });
 
+    const tabs = document.querySelectorAll('#viewTabs .tab');
+    const memoriesView = document.getElementById('memoriesView');
+    const knowledgeView = document.getElementById('knowledgeView');
+    let activeView = 'memories';
+    let knowledgeLoaded = false;
+
+    function switchView(view) {
+      if (activeView === view) return;
+      activeView = view;
+      tabs.forEach((tab) => {
+        tab.classList.toggle('active', tab.dataset.view === view);
+      });
+      if (view === 'memories') {
+        memoriesView.style.display = 'block';
+        knowledgeView.style.display = 'none';
+        loadMemories();
+      } else {
+        memoriesView.style.display = 'none';
+        knowledgeView.style.display = 'block';
+        if (!knowledgeLoaded) {
+          loadKnowledge();
+          knowledgeLoaded = true;
+        }
+      }
+    }
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => switchView(tab.dataset.view));
+    });
+
     function escapeHtml(text) {
       return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    }
+
+    async function loadKnowledge() {
+      const list = document.getElementById("knowledgeList");
+      list.innerHTML = "";
+      try {
+        const data = await request("/knowledge");
+        if (!data || !data.length) {
+          list.innerHTML = `<div class="empty">No knowledge found.</div>`;
+          return;
+        }
+        data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        data.forEach((k) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <h3>${escapeHtml(k.id)}</h3>
+            <pre>${escapeHtml(k.content)}</pre>
+            <div class="meta">
+              <span>created: ${escapeHtml(k.createdAt)}</span>
+              <span>updated: ${escapeHtml(k.updatedAt)}</span>
+            </div>
+            <div class="actions">
+              <button class="danger" data-id="${escapeHtml(k.id)}">Delete</button>
+            </div>
+          `;
+          card.querySelector("button").addEventListener("click", () => deleteKnowledge(k.id));
+          list.appendChild(card);
+        });
+      } catch (e) {
+        list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
+        toast("Error: " + e.message, "error");
+      }
+    }
+
+    async function deleteKnowledge(id) {
+      if (!confirm("Delete knowledge?")) return;
+      await request("/knowledge/" + id, { method: "DELETE" });
+      toast("Knowledge deleted.", "success");
+      await loadKnowledge();
+      await loadStats();
     }
 
     (async () => {

@@ -71,6 +71,9 @@ export function createWebServer({ memoryConfig, storage }) {
         sendJson(res, 200, await storage.listMemories());
       } else if (path === "/api/knowledge" && method === "GET") {
         sendJson(res, 200, await storage.listKnowledge());
+      } else if (path.match(/^\/api\/knowledge\/[^/]+$/) && method === "DELETE") {
+        const id = path.split("/").pop();
+        sendJson(res, 200, { deleted: await storage.deleteKnowledge(id) });
       } else if (path === "/api/stats" && method === "GET") {
         const memories = await storage.listMemories(10000);
         sendJson(res, 200, {

@@ -369,6 +369,8 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - 記憶新增：POST `/api/memory`（內容、scope）。
 - 記憶刪除：DELETE `/api/memory/:id`。
 - 記憶查詢：GET `/api/memory`（全部）與 GET `/api/memory/search?query=&scope=`。
+- 知識列表：GET `/api/knowledge`，在記憶下方顯示知識卡片，支援刪除。
+- 知識刪除：DELETE `/api/knowledge/:id`。
 - 統計：GET `/api/stats` 回傳記憶與知識總數。
 - 登入：若配置 `webServerAuthUsername/password`，需透過 Basic Auth，可在 fetch 中手動設定，或由瀏覽器提示 Basic Auth 輸入（fetch 需主動帶上 `Authorization: Basic <base64>`）。
 
