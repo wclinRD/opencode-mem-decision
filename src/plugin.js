@@ -1,6 +1,6 @@
 import { Plugin } from "@opencode/plugin";
 import { loadConfig } from "./config.js";
-import { autoCapture } from "./capture.js";
+import { autoCapture, filterSessionText } from "./capture.js";
 import { runDreaming } from "./dreaming.js";
 import { createWebServer, releaseWebServer } from "./server.js";
 import { injectMemories, formatInjectedPrompt, stripInjectedBlock, INJECTION_MARKER, calculateFillRatio } from "./inject.js";
@@ -208,24 +208,25 @@ export default Plugin.define({
               console.error(`[opencode-mem-decision] ctx.session.context failed for sessionID ${sessionID}: ${err?.message || err}`);
               return null;
             });
-            const text = sessionText(messages);
-            if (!text) {
-              console.log(`[opencode-mem-decision] no session text for session ${sessionID}, skip capture`);
+            const rawText = sessionText(messages);
+            const filteredText = filterSessionText(rawText);
+            if (!filteredText) {
+              console.log(`[opencode-mem-decision] no filtered session text for session ${sessionID}, skip capture`);
               continue;
             }
 
-            const classified = classifyMemory(text);
-            console.log(`[opencode-mem-decision] auto-capture classify: ${classified.type}, text length ${text.length}`);
+            const classified = classifyMemory(filteredText);
+            console.log(`[opencode-mem-decision] auto-capture classify: ${classified.type}, text length ${filteredText.length}`);
 
             await logEvent({
               sessionID,
               actor: "system",
               event_type: "auto-capture",
-              description: `Auto-captured session of length ${text.length} with type ${classified.type}`,
+              description: `Auto-captured filtered session of length ${filteredText.length} with type ${classified.type}`,
             });
 
             const action = await autoCapture({
-              sessionData: { id: sessionID, messages: [{ content: text }] },
+              sessionData: { id: sessionID, messages: [{ content: rawText }] },
               memoryConfig,
               storage: localStorage,
               classifyMemory: () => classified,

@@ -70,6 +70,7 @@ export async function searchMemories(query, filters = {}) {
   const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
   const typeFilter = filters.type;
   const confidenceFilter = filters.confidence;
+  const priorityFilter = filters.priority;
   const timeRange = filters.timeRange;
 
   let scoped = db.memories.filter((m) => effectiveScope === "default" || m.scope === effectiveScope);
@@ -77,6 +78,9 @@ export async function searchMemories(query, filters = {}) {
   if (typeFilter) scoped = scoped.filter((m) => m.type === typeFilter);
   if (confidenceFilter && typeof confidenceFilter === "number") {
     scoped = scoped.filter((m) => Number(m.confidence) >= confidenceFilter);
+  }
+  if (priorityFilter !== undefined && priorityFilter !== "all") {
+    scoped = scoped.filter((m) => Number(m.priority) === Number(priorityFilter));
   }
   if (timeRange) {
     const cutoff = new Date(Date.now() - timeRange).toISOString();

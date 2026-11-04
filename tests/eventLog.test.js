@@ -35,6 +35,7 @@ test("eventLog - summarizeRecentEvents generates summary when many events", asyn
   const now = new Date().toISOString();
   await logEvent({ sessionID: "ses_1", actor: "user", event_type: "tool_call", description: "deploy", related_memory_ids: ["mem_1"] });
   await logEvent({ sessionID: "ses_1", actor: "agent", event_type: "decision", description: "choose Fastify" });
+  await logEvent({ sessionID: "ses_1", actor: "agent", event_type: "commit", description: "push main" });
   await logEvent({ sessionID: "ses_2", actor: "system", event_type: "auto-capture", description: "capture", related_memory_ids: ["mem_1"] });
 
   const summary = await summarizeRecentEvents({ hours: 24 });

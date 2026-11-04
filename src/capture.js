@@ -14,9 +14,20 @@ const simHash = (text) => {
   }).sort().join("|");
 };
 
+function normalizeText(text) {
+  if (typeof text !== "string") return "";
+  return text
+    .toLowerCase()
+    .replace(/["'`.:;!?()[\]{}.,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function calculateSimilarity(a, b) {
-  const hashA = simHash(a);
-  const hashB = simHash(b);
+  const normA = normalizeText(a);
+  const normB = normalizeText(b);
+  const hashA = simHash(normA);
+  const hashB = simHash(normB);
   if (hashA === hashB) return 1.0;
   const setA = new Set(hashA.split("|"));
   const setB = new Set(hashB.split("|"));
@@ -26,14 +37,68 @@ export function calculateSimilarity(a, b) {
   return union === 0 ? 0 : intersection / union;
 }
 
+function isShortSubstringMatch(a, b) {
+  const normA = normalizeText(a);
+  const normB = normalizeText(b);
+  if (normA.length < 20 || normB.length < 20) return false;
+  const longer = normA.length >= normB.length ? normA : normB;
+  const shorter = normA.length >= normB.length ? normB : normA;
+  if (shorter.length > 0.3 * longer.length) return false;
+  const windows = longer.length - shorter.length + 1;
+  for (let i = 0; i < windows; i++) {
+    const window = longer.slice(i, i + shorter.length);
+    if (window === shorter) return true;
+    const windowNorm = normalizeText(window);
+    if (windowNorm === shorter) return true;
+  }
+  return false;
+}
+
 export function isDuplicate(newContent, existingMemories, threshold = 0.75) {
   const redacted = redactCredentials(newContent);
   for (const mem of existingMemories) {
-    const sim = calculateSimilarity(redacted, mem.content || "");
+    const content = mem.content || "";
+    const sim = calculateSimilarity(redacted, content);
     if (sim >= threshold) return { duplicate: true, existingId: mem.id, similarity: sim };
+    if (isShortSubstringMatch(redacted, content)) return { duplicate: true, existingId: mem.id, similarity: 0.9 };
   }
   return { duplicate: false };
 }
+
+const lowValuePatterns = [
+  /{[\s\S]*"type"\s*:\s*"tool_use"\s*,[\s\S]*}/i,
+  /{[\s\S]*"type"\s*:\s*"tool_result"\s*,[\s\S]*}/i,
+  /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[Z+-]/g,
+  /-----BEGIN [A-Z ]+ PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+ PRIVATE KEY-----/g,
+  /(?:0x)?[0-9a-fA-F]{16,}(?:\/[0-9a-fA-F]+)+/g,
+  /\b(?:Error|Exception|Stack trace)\b[\s\S]{0,120}(?=\n\n|\n$)/gi,
+  /\b(?:at\s+\w+\.)+\w+:[0-9]+:[0-9]+/gm,
+  /(?:檢查|建立|查看|繼續|已提交|已修改|準備|完成|查看修改|提交修改|推送)\b/gi,
+  /\b(branch|commit|push|git status)\b/gi,
+];
+
+function shouldExcludeLine(line) {
+  const norm = line.trim().toLowerCase();
+  if (norm.length < 6) return true;
+  if (/^(tool_use|tool_result|json|base64|stack|error|exception|auto-capture)\s*[:=]/i.test(norm)) return true;
+  if (/^\[auto-capture\]\s/i.test(norm)) return true;
+  if (lowValuePatterns.some((p) => (p.global ? p.test(line) : p.test(line)))) return true;
+  if (/^\s*(```json|```typescript|```javascript|```bash|```python|```zsh|```sh)\s*$/i.test(norm)) return true;
+  if (/^\s*(```)[\s\S]{0,30}\n/.test(line)) return true;
+  return false;
+}
+
+export function filterSessionText(raw) {
+  if (typeof raw !== "string") return "";
+  const parts = raw
+    .split("\n")
+    .map((l) => l.replace(/\n/g, ""))
+    .filter((l) => l.trim().length > 0 && !shouldExcludeLine(l));
+  const joined = parts.join("\n").trim();
+  return joined;
+}
+
+const MIN_QUALITY_LENGTH = 60;
 
 export async function autoCapture({ sessionData, memoryConfig, storage, classifyMemory }) {
   if (!memoryConfig.chatMessage?.enabled) return;
@@ -43,34 +108,40 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
       .map((m) => stripInjectedBlock(m?.content || ""))
       .filter(Boolean)
       .join("\n") || "";
-  if (!sessionText) return;
+  const filtered = filterSessionText(sessionText);
+  if (filtered.length < MIN_QUALITY_LENGTH) {
+    console.log(`[opencode-mem-decision] auto-capture skipped: filtered text length ${filtered.length} below threshold`);
+    return { action: "skip", reason: "below quality threshold" };
+  }
 
-  const classified = classifyMemory ? classifyMemory() : defaultClassifyMemory(sessionText);
+  const classified = classifyMemory ? classifyMemory() : defaultClassifyMemory(filtered);
   await logEvent({
     sessionID: sessionData?.id,
     actor: "system",
     event_type: "auto-capture",
-    description: `Captured session of length ${sessionText.length}, type ${classified.type}`,
+    description: `Filtered session of length ${filtered.length}, type ${classified.type}, confidence ${classified.confidence}`,
     related_memory_ids: [],
   });
 
   const existingMemories = await storage.listMemories(1000);
-  const dedup = isDuplicate(sessionText, existingMemories, memoryConfig.updateOnCaptureSimilarityThreshold || 0.75);
+  const dedup = isDuplicate(filtered, existingMemories, memoryConfig.updateOnCaptureSimilarityThreshold || 0.75);
 
   if (dedup.duplicate && memoryConfig.updateOnCaptureEnabled) {
     const existing = await storage.getMemory(dedup.existingId);
     await storage.updateMemory(dedup.existingId, {
-      content: redactCredentials(sessionText),
+      content: redactCredentials(filtered),
       updatedAt: new Date().toISOString(),
     });
     return { action: "update", id: dedup.existingId, similarity: dedup.similarity };
   }
 
   if (!dedup.duplicate) {
-    const memory = await storage.addMemory(sessionText, "project", sessionData?.id, {
+    const memory = await storage.addMemory(redactCredentials(filtered), "project", sessionData?.id, {
       type: classified.type,
       confidence: classified.confidence,
       sensitive: classified.sensitive,
+      priority: classified.priority,
+      tags: classified.tags,
     });
     const summary = await summarizeRecentEvents({ hours: 24 });
     if (summary) {

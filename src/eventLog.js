@@ -47,10 +47,14 @@ export async function summarizeRecentEvents({ hours = 24 } = {}) {
   const recent = events.filter((e) => e.time >= cutoff);
   if (recent.length < 3) return null;
 
-  const summary = recent
+  // Exclude internal auto-capture and tool-use/result events from user-facing summary.
+  const userEvents = recent.filter((e) => e.event_type !== "auto-capture" && !["tool_use", "tool_result"].includes(e.event_type));
+  if (userEvents.length < 3) return null;
+
+  const summary = userEvents
     .map((e) => `[${e.event_type}] ${e.description}`)
     .join("\n");
 
-  const related_ids = recent.flatMap((e) => e.related_memory_ids || []);
+  const related_ids = userEvents.flatMap((e) => e.related_memory_ids || []);
   return { summary, related_memory_ids: [...new Set(related_ids)] };
 }

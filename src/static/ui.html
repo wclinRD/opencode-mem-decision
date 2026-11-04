@@ -358,12 +358,19 @@
           <option value="rule">Rule</option>
           <option value="lesson">Lesson</option>
           <option value="system">System</option>
+          <option value="task">Task</option>
         </select>
         <select id="confidenceFilter">
           <option value="all">All confidence</option>
           <option value="0.5">≥ 0.5</option>
           <option value="0.7">≥ 0.7</option>
           <option value="0.9">≥ 0.9</option>
+        </select>
+        <select id="priorityFilter">
+          <option value="all">All priorities</option>
+          <option value="0">Low (no priority)</option>
+          <option value="1">Medium (1)</option>
+          <option value="2">High (2)</option>
         </select>
         <select id="timeRangeFilter">
           <option value="all">Any time</option>
@@ -460,15 +467,17 @@
         const scopeFilter = document.getElementById("scopeFilter").value;
         const typeFilter = document.getElementById("typeFilter").value;
         const confidenceFilter = document.getElementById("confidenceFilter").value;
+        const priorityFilter = document.getElementById("priorityFilter").value;
         const timeRangeFilter = document.getElementById("timeRangeFilter").value;
         const sortSelect = document.getElementById("sortSelect").value;
-        if (query || scopeFilter !== "all" || typeFilter !== "all" || confidenceFilter !== "all" || timeRangeFilter !== "all") {
+        if (query || scopeFilter !== "all" || typeFilter !== "all" || confidenceFilter !== "all" || priorityFilter !== "all" || timeRangeFilter !== "all") {
           const params = new URLSearchParams({
             query,
             scope: scopeFilter === "all" ? "default" : scopeFilter,
           });
           if (typeFilter !== "all") params.set("type", typeFilter);
           if (confidenceFilter !== "all") params.set("confidence", confidenceFilter);
+          if (priorityFilter !== "all") params.set("priority", priorityFilter);
           if (timeRangeFilter !== "all") params.set("timeRange", timeRangeFilter);
           data = await request("/memory/search?" + params.toString());
         }
@@ -486,6 +495,8 @@
           const conf = Number(m.confidence || 0.5);
           const confClass = conf >= 0.8 ? "conf-high" : conf >= 0.5 ? "conf-medium" : "conf-low";
           const sensClass = (m.sensitivity || "normal").toLowerCase();
+          const priorityClass = m.priority === 2 ? "conf-high" : m.priority === 1 ? "conf-medium" : "conf-low";
+          const priorityLabel = m.priority === 2 ? "high" : m.priority === 1 ? "medium" : "low";
           card.innerHTML = `
             <h3>${escapeHtml(m.id)}</h3>
             <div class="card-content">${escapeHtml(m.content)}</div>
@@ -494,6 +505,8 @@
               <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
               <span class="pill ${confClass}" data-conf="${escapeHtml(m.confidence || 0.5)}">${conf.toFixed(2)}</span>
               <span class="pill sensitivity-${sensClass}">${escapeHtml(m.sensitivity || "normal")}</span>
+              <span class="pill ${priorityClass}">${priorityLabel}</span>
+              ${m.tags?.length ? `<span class="pill">tags: ${escapeHtml(m.tags.join(", "))}</span>` : ""}
             </div>
             <div class="time-row">created: ${formatLocalTime(m.createdAt)} · updated: ${formatLocalTime(m.updatedAt)}</div>
             <div class="actions">
@@ -557,6 +570,7 @@
     }
     document.getElementById("searchInput").addEventListener("input", updateDeleteAllFilterState);
     document.getElementById("scopeFilter").addEventListener("change", updateDeleteAllFilterState);
+    document.getElementById("priorityFilter").addEventListener("change", () => {});
     deleteAllFilterButton.addEventListener("click", async () => {
       const q = document.getElementById("searchInput").value.trim();
       const scopeFilter = document.getElementById("scopeFilter").value;

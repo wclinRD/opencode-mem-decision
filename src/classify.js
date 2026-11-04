@@ -10,12 +10,37 @@ const SENSITIVE_PATTERNS = [
   { name: "Phone number", pattern: /\b(?:\+?\d{1,3}[-\s]?)?\(?\d{3}\)?[-\s]?\d{3}[-\s]?\d{4}\b/g },
 ];
 
-const TYPE_PATTERNS = [
-  { type: "preference", pattern: /(?:prefer|preferable|like|dislike|always|never|usually|tend to|avoid|not want)/i },
-  { type: "rule", pattern: /\b(r|require|must|should|cannot|avoid|never|always)\b/i },
-  { type: "lesson", pattern: /(?:lesson|learned|mistake|bug|fix|error|root cause|debug)/i },
-  { type: "fact", pattern: /(?:uses|uses in|implemented|built on|based on|deployed on|configured|the [a-z]+ is)/i },
-  { type: "system", pattern: /system|instruction|prompt|rule of system/i },
+export const TYPE_PATTERNS = [
+  {
+    type: "preference",
+    pattern: /(?:prefer(?:s|able)?|likes?|dislikes?|always|never|usually|tends? to|avoids?|want(?:s)?|not want)/i,
+    weight: 0.3,
+  },
+  {
+    type: "rule",
+    pattern: /\b(r|require|requires?|must|should|cannot|avoid|never|always|must not|enforce)\b/i,
+    weight: 0.4,
+  },
+  {
+    type: "lesson",
+    pattern: /(?:lessons?|learn(?:ed|ing)|mistake|bugs?|fix(?:ed|es)?|errors?|root cause|debug(?:ging|ged))/i,
+    weight: 0.3,
+  },
+  {
+    type: "fact",
+    pattern: /\b(?:uses|used|implemented|built on|based on|deployed on|configured|the [a-z]+ is|runs on|depends on)\b/i,
+    weight: 0.2,
+  },
+  {
+    type: "system",
+    pattern: /system|instruction|prompt|rule of system/i,
+    weight: 0.2,
+  },
+  {
+    type: "task",
+    pattern: /(?:how to|steps to|procedure for|instructions for|workflow for|setup for)/i,
+    weight: 0.3,
+  },
 ];
 
 export function looksSensitive(text) {
@@ -28,12 +53,41 @@ export function classifyMemory(text) {
   const sensitive = looksSensitive(text);
   let type = "fact";
   let confidence = 0.5;
-  for (const { type: t, pattern } of TYPE_PATTERNS) {
-    if (pattern.test(text)) {
+  let matchCount = 0;
+  for (const { type: t, pattern, weight } of TYPE_PATTERNS) {
+    // Keep global flag; we advance lastIndex after each match to avoid zero-length loops.
+    const tempPattern = new RegExp(pattern.source, (pattern.flags || "") + "g");
+    let match;
+    let count = 0;
+    while ((match = tempPattern.exec(text)) !== null) {
+      count++;
+      matchCount++;
       type = t;
-      confidence += 0.25;
-      break;
+      confidence += weight;
+      // Stop after first non-fact match; do not check later patterns.
+      if (t !== "fact") break;
+      // Advance manually to avoid zero-length or boundary loops.
+      tempPattern.lastIndex = match.index + (match[0].length || 1);
+    }
+    if (count > 0 && t !== "fact") break;
+  }
+  const lengthScore = text.length < 40 ? 0 : text.length >= 150 ? 0.05 : 0;
+  confidence = Math.min(1, confidence + lengthScore);
+  const priority = confidence >= 0.8 ? 2 : confidence >= 0.65 ? 1 : 0;
+  const tags = extractTags(text, type);
+  return { type, confidence, sensitive, priority, tags };
+}
+
+function extractTags(text, type) {
+  const tags = new Set();
+  if (type === "fact") {
+    const techMatches = text.match(/\b(?:React|Vue|Svelte|Angular|Node|Express|Fastify|Python|TypeScript|JavaScript|Go|Rust|Docker|Kubernetes|AWS|GCP|Azure|PostgreSQL|Redis|MongoDB|Prisma|Tauri|Capacitor|Electron)\b/gi);
+    if (techMatches) {
+      techMatches.forEach((t) => tags.add(t.toLowerCase()));
     }
   }
-  return { type, confidence, sensitive };
+  if (type === "lesson" && /error|bug|fix/i.test(text)) tags.add("debug");
+  if (type === "preference" && /language|中文|Traditional Chinese/i.test(text)) tags.add("language");
+  if (tags.size > 0) return Array.from(tags).slice(0, 3);
+  return [];
 }
