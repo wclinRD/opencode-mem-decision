@@ -15,9 +15,14 @@ const DEFAULT_CONFIG = {
     captureChildSessions: false,
     contextWindowSize: 128000,
   },
-  updateOnCaptureEnabled: false,
+  updateOnCaptureEnabled: true,
   updateOnCaptureSimilarityThreshold: 0.75,
   updateOnCaptureMaxCandidates: 5,
+  duplicateDetection: {
+    enabled: true,
+    similarityThreshold: 0.75,
+    updateOnMatch: true,
+  },
   userProfileAnalysisInterval: 10,
   dreaming: {
     enabled: false,
@@ -32,6 +37,9 @@ const DEFAULT_CONFIG = {
   embeddingModel: "Xenova/nomic-embed-text-v1",
   embeddingApiUrl: "",
   embeddingApiKey: "",
+  extractionProvider: "stub",
+  extractionApiUrl: "",
+  extractionApiKey: "",
   opencodeProvider: "anthropic",
   opencodeModel: "claude-haiku-4-5-20251001",
   memory: {

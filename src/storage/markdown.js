@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { getStorageDir } from "./local.js";
 import { redactCredentials } from "../security.js";
+import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
 
 const VAULT_DIR = "vault";
 
@@ -71,17 +72,46 @@ async function readMarkdownFile(id) {
   }
 }
 
-export async function addMemory(content, scope = "project", sessionId, metadata = {}) {
+export async function addMemory(content, scope = "project", sessionId, metadata = {}, duplicateConfig = null) {
+  const dupConfig = buildDuplicateConfig(duplicateConfig);
+  const allMemories = await listAllMemories();
+  const existingMemories = allMemories.filter((m) => m.content && m.content.length > 0);
+  const redacted = redactCredentials(content);
+
+  if (dupConfig.enabled) {
+    const dedup = await findDuplicateMemories(redacted, existingMemories, dupConfig.similarityThreshold, null);
+    if (dedup.duplicate && dupConfig.updateOnMatch) {
+      const existing = allMemories.find((m) => m.id === dedup.existingId);
+      if (existing) {
+        existing.content = redacted;
+        existing.scope = scope || existing.scope;
+        existing.sessionId = sessionId || existing.sessionId;
+        existing.type = metadata?.type || existing.type;
+        existing.confidence = metadata?.confidence !== undefined ? Number(metadata.confidence) : existing.confidence;
+        existing.sensitivity = metadata?.sensitive === true ? "sensitive" : existing.sensitivity;
+        existing.priority = metadata?.priority !== undefined ? Number(metadata.priority) : existing.priority;
+        existing.tags = metadata?.tags || existing.tags;
+        existing.updatedAt = new Date().toISOString();
+        const frontMatter = createFrontMatter(existing);
+        await fs.writeFile(memoryFilePath(existing.id), frontMatter, "utf8");
+        return existing;
+      }
+    }
+    if (dedup.duplicate && !dupConfig.updateOnMatch) {
+      return null;
+    }
+  }
+
   const memoryId = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const memory = {
     id: memoryId,
-    content: redactCredentials(content),
+    content: redacted,
     scope,
-    type: metadata.type || "fact",
-    confidence: Number.isFinite(metadata.confidence) ? metadata.confidence : 0.5,
-    sensitivity: metadata.sensitive === true ? "sensitive" : "normal",
-    priority: Number.isFinite(metadata.priority) ? metadata.priority : 1,
-    tags: metadata.tags || [],
+    type: metadata?.type || "fact",
+    confidence: Number.isFinite(metadata?.confidence) ? Number(metadata.confidence) : 0.5,
+    sensitivity: metadata?.sensitive === true ? "sensitive" : "normal",
+    priority: Number.isFinite(metadata?.priority) ? Number(metadata.priority) : 1,
+    tags: metadata?.tags || [],
     ...(sessionId ? { sessionId } : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

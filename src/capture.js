@@ -38,7 +38,7 @@ export function calculateSimilarity(a, b) {
   return union === 0 ? 0 : intersection / union;
 }
 
-function isShortSubstringMatch(a, b) {
+export function isShortSubstringMatch(a, b) {
   const normA = normalizeText(a);
   const normB = normalizeText(b);
   if (normA.length < 20 || normB.length < 20) return false;
@@ -124,42 +124,42 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     related_memory_ids: [],
   });
 
-  const defaultConfig = loadConfig();
-  const existingMemories = await storage.listMemories(1000, "default", defaultConfig);
-  const dedup = isDuplicate(filtered, existingMemories, memoryConfig.updateOnCaptureSimilarityThreshold || 0.75);
-
-  if (dedup.duplicate && memoryConfig.updateOnCaptureEnabled) {
-    const existing = await storage.getMemory(dedup.existingId);
-    await storage.updateMemory(dedup.existingId, {
-      content: redactCredentials(filtered),
-      type: classified.type,
-      confidence: classified.confidence,
-      priority: classified.priority,
-      sensitive: classified.sensitive,
-      tags: classified.tags,
-    });
-    return { action: "update", id: dedup.existingId, similarity: dedup.similarity };
-  }
-
-  if (!dedup.duplicate) {
-    const memory = await storage.addMemory(redactCredentials(filtered), "project", sessionData?.id, {
+  const duplicateConfig = memoryConfig.duplicateDetection || { enabled: true, similarityThreshold: 0.75, updateOnMatch: true };
+  const memory = await storage.addMemory(
+    redactCredentials(filtered),
+    "project",
+    sessionData?.id,
+    {
       type: classified.type,
       confidence: classified.confidence,
       sensitive: classified.sensitive,
       priority: classified.priority,
       tags: classified.tags,
-    });
-    const summary = await summarizeRecentEvents({ hours: 24 });
-    if (summary) {
-      await storage.addMemory(
-        `Session Summary: ${summary.summary}\nRelated memory IDs: ${summary.related_memory_ids.join(",")}`,
-        "project",
-        null,
-        { type: "summary", confidence: 0.8, sensitivity: "normal", tags: ["auto-summary"] }
-      );
-    }
-    return { action: "add", id: memory.id };
+    },
+    duplicateConfig
+  );
+
+  const existingMemories = await storage.listMemories(1000, "default", memoryConfig);
+  const existingIds = new Set(existingMemories.map((m) => m.id));
+
+  if (!memory) {
+    return { action: "skip", reason: "below similarity threshold" };
   }
 
-  return { action: "skip", reason: "below similarity threshold" };
+  const wasUpdate = existingIds.has(memory.id);
+  const summary = await summarizeRecentEvents({ hours: 24 });
+  if (summary && !wasUpdate) {
+    await storage.addMemory(
+      `Session Summary: ${summary.summary}\nRelated memory IDs: ${summary.related_memory_ids.join(",")}`,
+      "project",
+      null,
+      { type: "summary", confidence: 0.8, sensitivity: "normal", tags: ["auto-summary"] },
+      duplicateConfig
+    );
+  }
+
+  if (wasUpdate) {
+    return { action: "update", id: memory.id };
+  }
+  return { action: "add", id: memory.id };
 }

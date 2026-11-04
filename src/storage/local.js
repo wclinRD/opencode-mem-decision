@@ -5,6 +5,7 @@ import { EmbeddingService, cosineSimilarity } from "../embedding.js";
 import { redactCredentials } from "../security.js";
 import { deriveKey, encryptData, decryptData } from "./encryption.js";
 import { ensureSchema } from "./migrations.js";
+import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
 import { randomBytes } from "node:crypto";
 
 let currentEmbeddingService = null;
@@ -93,7 +94,7 @@ async function writeJsonFile(filePath, data) {
   await fs.writeFile(filePath, content, "utf-8");
 }
 
-export async function addMemory(content, scope = "project", sessionId, metadata = {}) {
+export async function addMemory(content, scope = "project", sessionId, metadata = {}, duplicateConfig = null) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   await ensureDir(path.dirname(filePath));
   const db = await readJsonFile(filePath);
@@ -108,15 +109,42 @@ export async function addMemory(content, scope = "project", sessionId, metadata 
     }
   }
 
+  const dupConfig = buildDuplicateConfig(duplicateConfig);
+
+  if (dupConfig.enabled) {
+    const existingMemories = (db.memories || []).filter((m) => m.content && m.content.length > 0);
+    const dedup = await findDuplicateMemories(redacted, existingMemories, dupConfig.similarityThreshold, currentEmbeddingService);
+    if (dedup.duplicate && dupConfig.updateOnMatch) {
+      const existing = db.memories.find((m) => m.id === dedup.existingId);
+      if (existing) {
+        existing.content = redacted;
+        existing.embedding = embedding;
+        existing.scope = scope || existing.scope;
+        existing.sessionId = sessionId || existing.sessionId;
+        existing.type = metadata?.type || existing.type;
+        existing.confidence = metadata?.confidence !== undefined ? Number(metadata.confidence) : existing.confidence;
+        existing.sensitivity = metadata?.sensitive === true ? "sensitive" : existing.sensitivity;
+        existing.priority = metadata?.priority !== undefined ? Number(metadata.priority) : existing.priority;
+        existing.tags = metadata?.tags || existing.tags;
+        existing.updatedAt = new Date().toISOString();
+        await writeJsonFile(filePath, db);
+        return existing;
+      }
+    }
+    if (dedup.duplicate && !dupConfig.updateOnMatch) {
+      return null;
+    }
+  }
+
   const memory = {
     id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     content: redacted,
     scope,
-    type: metadata.type || "fact",
-    confidence: Number.isFinite(metadata.confidence) ? metadata.confidence : 0.5,
-    sensitivity: metadata.sensitive === true ? "sensitive" : "normal",
-    priority: Number.isFinite(metadata.priority) ? metadata.priority : 1,
-    tags: metadata.tags || [],
+    type: metadata?.type || "fact",
+    confidence: Number.isFinite(metadata?.confidence) ? Number(metadata.confidence) : 0.5,
+    sensitivity: metadata?.sensitive === true ? "sensitive" : "normal",
+    priority: Number.isFinite(metadata?.priority) ? Number(metadata.priority) : 1,
+    tags: metadata?.tags || [],
     ...(sessionId ? { sessionId } : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

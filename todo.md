@@ -46,6 +46,10 @@
 - [x] 建立 Markdown Vault backend：`src/storage/markdown.js`，支援以 markdown front matter 儲存記憶，並完成 `addMemory`、`searchMemories`、`listMemories`、`getMemory`、`updateMemory`、`deleteMemory`。
 - [x] `src/plugin.js` 依 `memoryBackend` 選擇 backend（`database` 或 `markdown`）。
 - [x] 測試：80/80 通過（`embedding.test.js`、`migrations.test.js`、`markdown.test.js`、`storage.test.js`）。
+- [x] 實作自動去重功能：`src/dedup.js` 提供 `findDuplicateMemories` 與 `buildDuplicateConfig`，`src/storage/local.js` 與 `markdown.js` 的 `addMemory` 依 `duplicateDetection` 配置進行相似度比對與更新/跳過。
+- [x] 配置預設啟用自動去重：`src/config.js` 加入 `duplicateDetection: { enabled: true, similarityThreshold: 0.75, updateOnMatch: true }`，並將 `updateOnCaptureEnabled` 預設設為 `true`。
+- [x] `src/capture.js` 的 auto-capture 現直接使用 storage `addMemory` 的內建去重並回傳 `update` 或 `add` 結果。
+- [x] 測試：84/84 通過（含 `dedup.test.js`）。
 
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
 - [ ] Auto-Capture AI 提取 stub（provider structured output）。

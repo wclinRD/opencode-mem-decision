@@ -137,8 +137,8 @@ test("storage - profile builder writes profile.json in the temp dir", async () =
 
 test("storage - dreaming trash round-trip uses the temp dir", async () => {
   const shared = Array.from({ length: 9 }, (_, i) => `token${i}`).join(" ");
-  await localStorage.addMemory(`${shared} alpha`, "project");
-  await localStorage.addMemory(`${shared} beta`, "project");
+  await localStorage.addMemory(`${shared} alpha`, "project", null, {}, { enabled: false });
+  await localStorage.addMemory(`${shared} beta`, "project", null, {}, { enabled: false });
 
   const result = await runDreaming({ memoryConfig: { dreaming: { enabled: true, relatedThreshold: 0.75 } }, storage: localStorage });
   assert.equal(result.action, "dreamed");

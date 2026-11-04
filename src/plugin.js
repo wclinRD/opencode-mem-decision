@@ -83,11 +83,12 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
 
   if (mode === "add") {
     const classified = classifyMemory(args.content);
+    const duplicateConfig = memoryConfig.duplicateDetection || { enabled: true, similarityThreshold: 0.75, updateOnMatch: true };
     return storage.addMemory(args.content, args.scope || "project", null, {
       type: classified.type,
       confidence: classified.confidence,
       sensitive: classified.sensitive,
-    });
+    }, duplicateConfig);
   }
   if (mode === "update") {
     const updates = { ...(args.content && { content: args.content }), ...(args.scope && { scope: args.scope }) };

@@ -447,6 +447,20 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] 新增 `tests/embedding.test.js`（8 個測試）與 `tests/storage.test.js`（vector search 相關測試）。
 - [x] 測試總數：73 全部通過。
 
+## 自動去重功能（2026-11-05）
+
+- [x] 建立 `src/dedup.js`：提供 `findDuplicateMemories` 與 `buildDuplicateConfig`。
+  - 當 embedding service 可用時，使用向量餘弦相似度（固定 768 維）比對記憶。
+  - 當無 embedding 時，回退至字串 simHash/Jaccard 相似度與短子句比對。
+- [x] 更新 `src/config.js`：`duplicateDetection` 預設 `{ enabled: true, similarityThreshold: 0.75, updateOnMatch: true }`；`updateOnCaptureEnabled` 預設設為 `true`。
+- [x] 更新 `src/storage/local.js::addMemory`：依 `duplicateDetection` 配置檢查現有記憶，若相似且 `updateOnMatch` 為真，則更新既有記憶而非新增；否則跳過新增。
+- [x] 更新 `src/storage/markdown.js::addMemory`：以 `findDuplicateMemories` 進行去重，更新既有 markdown 檔案或跳過。
+- [x] 更新 `src/capture.js::autoCapture`：不再使用舊有的 `isDuplicate` 內建檢查，直接呼叫 `storage.addMemory` 並依其回傳值判斷為 update 或 add。
+- [x] 更新 `src/plugin.js::runMemoryMode add`：傳遞 `duplicateDetection` 配置至 `storage.addMemory`。
+- [x] 補上 `tests/dedup.test.js`（4 個測試）。
+- [x] 調整 `tests/storage.test.js` 的 dreaming trash 測試，加入 `{ enabled: false }` 避免預設去重干擾。
+- [x] 全部測試通過：84/84。
+
 ## Database Encryption at Rest（2026-11-04）
 
 - [x] 建立 `src/storage/encryption.js`，使用 `AES-256-GCM` 加密/解密 JSON 資料（衍生金鑰使用 `scrypt`，salt 儲存於 `encryption/salt.json`）。
