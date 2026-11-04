@@ -181,27 +181,42 @@ export default Plugin.define({
       cleanups.push(() => registration?.dispose?.());
     }
 
-    // Auto-capture runs when a session becomes idle. Use V2 `session.status` event
-    // (with `status.type === "idle"`) instead of the deprecated `session.idle`.
+    // Auto-capture runs on session completion or idle transitions.
+    // Relies on session.execution.* for reliable completion in V2;
+    // session.status.type === "idle" may occur between internal turns.
     if (ctx.event?.subscribe && ctx.session?.context) {
       const controller = new AbortController();
       cleanups.push(() => controller.abort());
       void (async () => {
         try {
           for await (const event of ctx.event.subscribe({
-            types: ["session.status"],
+            types: ["session.status", "session.execution.succeeded", "session.execution.failed", "session.execution.interrupted"],
             signal: controller.signal,
           })) {
-            if (event?.type !== "session.status") continue;
-            const status = event.data?.status;
-            if (status?.type !== "idle") continue;
-            const sessionID = event.data?.sessionID;
+            const status = event?.data?.status;
+            const sessionID = event?.data?.sessionID;
             if (!sessionID) continue;
-            const messages = await ctx.session.context({ sessionID });
+
+            // session.execution.* are reliable completion events in V2.
+            // session.status.type === "idle" may occur between internal turns.
+            let isCompletionOrIdle = event?.type?.startsWith("session.execution.") || status?.type === "idle";
+            if (!isCompletionOrIdle) continue;
+
+            console.log(`[opencode-mem-decision] auto-capture triggered for session ${sessionID}, event type ${event?.type}`);
+
+            const messages = await ctx.session.context({ sessionID }).catch((err) => {
+              console.error(`[opencode-mem-decision] ctx.session.context failed for sessionID ${sessionID}: ${err?.message || err}`);
+              return null;
+            });
             const text = sessionText(messages);
-            if (!text) continue;
+            if (!text) {
+              console.log(`[opencode-mem-decision] no session text for session ${sessionID}, skip capture`);
+              continue;
+            }
 
             const classified = classifyMemory(text);
+            console.log(`[opencode-mem-decision] auto-capture classify: ${classified.type}, text length ${text.length}`);
+
             await logEvent({
               sessionID,
               actor: "system",
@@ -209,12 +224,13 @@ export default Plugin.define({
               description: `Auto-captured session of length ${text.length} with type ${classified.type}`,
             });
 
-            await autoCapture({
+            const action = await autoCapture({
               sessionData: { id: sessionID, messages: [{ content: text }] },
               memoryConfig,
               storage: localStorage,
               classifyMemory: () => classified,
             });
+            console.log(`[opencode-mem-decision] auto-capture action:`, action);
           }
         } catch (error) {
           if (!controller.signal.aborted) {

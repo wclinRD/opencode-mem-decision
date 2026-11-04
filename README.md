@@ -582,7 +582,7 @@ Project layout:
 .
 ├── index.js                 # re-exports the plugin definition
 ├── src/
-│   ├── plugin.js            # V2 Plugin.define + tool registration + session.idle
+│   ├── plugin.js            # V2 Plugin.define + tool registration + session.execution.* auto-capture
 │   ├── config.js            # defaults and deep merge
 │   ├── capture.js           # auto-capture, similarity, deduplication
 │   ├── inject.js            # recall, injection marker, strip helper
