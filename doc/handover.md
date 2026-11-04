@@ -398,6 +398,16 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - Memwyre OpenCode Plugin: https://memwyre.tech/opencode-memory
 - OpenChamber Extensions: https://openchamber.dev/extensions/
 
+## 記憶品質改進 (2026-11-04)
+
+- [x] `eventLog.js`：`summarizeRecentEvents` 現在排除 `auto-capture`、`tool_use`、`tool_result`，保留 `tool_call` 等使用者事件。
+- [x] `capture.js`：`shouldExcludeLine` 新增 `[auto-capture]` 線與程式狀態訊息過濾。
+- [x] `classify.js`：修正正則匹配無限循環；只在有匹配時對非 fact 類別中斷；提高 confidence 門檻至 0.8。
+- [x] 測試：`tests/eventLog.test.js` 調整以符合新邏輯。
+- [x] 全部測試通過（55/55）。
+
+詳細待辦與計畫參見 [`todo.md`](../todo.md)。
+
 ## 下一步
 
 1. 確認功能模組清單無誤。
