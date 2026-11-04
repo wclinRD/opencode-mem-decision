@@ -101,7 +101,7 @@ export function filterSessionText(raw) {
 
 const MIN_QUALITY_LENGTH = 60;
 
-export async function autoCapture({ sessionData, memoryConfig, storage, classifyMemory }) {
+export async function autoCapture({ sessionData, memoryConfig, storage, classifyMemory, extractionService }) {
   if (!memoryConfig.chatMessage?.enabled) return;
 
   const sessionText =
@@ -147,6 +147,32 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   }
 
   const wasUpdate = existingIds.has(memory.id);
+
+  if (extractionService) {
+    try {
+      const extracted = await extractionService.extract(filtered);
+      if (extracted && typeof extracted === "object") {
+        const summary = typeof extracted.summary === "string" && extracted.summary.trim().length > 0 ? extracted.summary : null;
+        const decisions = Array.isArray(extracted.decisions) ? extracted.decisions.filter(Boolean) : [];
+        const topics = Array.isArray(extracted.topics) ? extracted.topics.filter(Boolean) : [];
+        const codeSnippets = Array.isArray(extracted.codeSnippets) ? extracted.codeSnippets.filter(Boolean) : [];
+
+        if (summary) {
+          const summaryText = `Auto-extracted summary:\n${summary}\nTopics: ${topics.join(", ")}`;
+          await storage.addMemory(summaryText, "project", sessionData?.id, { type: "summary", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction"] }, duplicateConfig);
+        }
+        if (decisions.length > 0) {
+          await storage.addMemory(`Auto-extracted decisions:\n${decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")}`, "project", sessionData?.id, { type: "decision", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction"] }, duplicateConfig);
+        }
+        if (codeSnippets.length > 0) {
+          await storage.addMemory(`Auto-extracted code snippets:\n${codeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}`, "project", sessionData?.id, { type: "code", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction"] }, duplicateConfig);
+        }
+      }
+    } catch (e) {
+      console.error(`[opencode-mem-decision] extraction failed: ${e.message}`);
+    }
+  }
+
   const summary = await summarizeRecentEvents({ hours: 24 });
   if (summary && !wasUpdate) {
     await storage.addMemory(

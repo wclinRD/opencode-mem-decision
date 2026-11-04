@@ -52,7 +52,7 @@
 - [x] 測試：84/84 通過（含 `dedup.test.js`）。
 
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
-- [ ] Auto-Capture AI 提取 stub（provider structured output）。
+- [x] Auto-Capture AI 提取 stub（provider structured output）：整合 `src/extraction.js`，在 auto-capture 產生 summary/decisions/codeSnippets 記憶。
 - [ ] User Profile 自動更新（每 N 個 prompts）。
 - [ ] Shared project memory via `.opencode-mem-project`。
 - [ ] Shared skills registry + REST API。

@@ -461,6 +461,14 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] 調整 `tests/storage.test.js` 的 dreaming trash 測試，加入 `{ enabled: false }` 避免預設去重干擾。
 - [x] 全部測試通過：84/84。
 
+## Auto-Capture AI 提取 stub（2026-11-05）
+
+- [x] 建立 `src/extraction.js`：`ExtractionService` 支援遠端 OpenAI 相容聊天完成 API (`extractionApiUrl`/`extractionApiKey`)、Hugging Face Inference (`extractionModel`)，以及本地 stub（摘要、topics、codeSnippets、decisions）。
+- [x] `src/plugin.js` 初始化 `ExtractionService`，並傳入 `capture.js::autoCapture`。
+- [x] `capture.js::autoCapture` 在儲存主記憶後，調用 `extract`，若提取結果包含 summary、decisions、codeSnippets，則分別儲存 type 為 summary/decision/code 的附加記憶，tags 標示 `auto-extraction`。
+- [x] 更新 `src/config.js` 增加 `extractionProvider`（預設 "stub"）、`extractionApiUrl`、`extractionApiKey`、`extractionModel`。
+- [x] 全部測試通過：84/84。
+
 ## Database Encryption at Rest（2026-11-04）
 
 - [x] 建立 `src/storage/encryption.js`，使用 `AES-256-GCM` 加密/解密 JSON 資料（衍生金鑰使用 `scrypt`，salt 儲存於 `encryption/salt.json`）。

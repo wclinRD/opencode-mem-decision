@@ -8,6 +8,7 @@ import { buildProfile, recordPrompt } from "./profile.js";
 import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory } from "./classify.js";
 import { EmbeddingService } from "./embedding.js";
+import { ExtractionService } from "./extraction.js";
 import { setEmbeddingService } from "./storage/local.js";
 
 // Sessions that already received the one-shot injection. Module level because
@@ -153,6 +154,9 @@ export default Plugin.define({
     const embeddingService = new EmbeddingService(memoryConfig);
     setEmbeddingService(embeddingService);
 
+    // Initialize extraction service
+    const extractionService = new ExtractionService(memoryConfig);
+
     if (backend === "markdown") {
       console.log("[opencode-mem-decision] using Markdown Vault backend");
       const { markdownStorage } = await import("./storage/markdown.js");
@@ -267,6 +271,7 @@ export default Plugin.define({
               memoryConfig,
               storage,
               classifyMemory: () => classified,
+              extractionService,
             });
             console.log(`[opencode-mem-decision] auto-capture action:`, action);
           }
