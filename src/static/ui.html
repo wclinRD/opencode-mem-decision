@@ -181,32 +181,41 @@
       .grid { grid-template-columns: 1fr; }
     }
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--surface), transparent 5%), var(--surface));
+      border: 1px solid color-mix(in srgb, var(--border), transparent 25%);
+      border-radius: 14px;
+      padding: 18px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      box-shadow: var(--shadow-sm);
-      transition: box-shadow 0.2s;
+      gap: 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 4px 14px rgba(0,0,0,0.06);
+      transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+      position: relative;
     }
-    .card:hover { box-shadow: var(--shadow); }
+    .card:hover {
+      box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08);
+      border-color: color-mix(in srgb, var(--primary), var(--border) 30%);
+      transform: translateY(-1px);
+    }
     .card h3 {
       margin: 0;
       font-size: 15px;
+      font-weight: 600;
       word-break: break-word;
+      color: var(--text);
     }
     .card pre {
       margin: 0;
       font-size: 13px;
       overflow: auto;
       white-space: pre-wrap;
-      background: var(--surface-2);
-      padding: 8px;
-      border-radius: 6px;
+      background: color-mix(in srgb, var(--surface-2), transparent 10%);
+      padding: 10px;
+      border-radius: 8px;
       max-height: 200px;
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border), transparent 15%);
+      line-height: 1.45;
+      color: var(--text);
     }
     .meta {
       font-size: 12px;
@@ -217,13 +226,18 @@
       align-items: center;
     }
     .pill {
-      background: var(--surface-2);
+      background: color-mix(in srgb, var(--surface-2), transparent 5%);
       color: var(--muted);
-      border: 1px solid var(--border);
+      border: 1px solid color-mix(in srgb, var(--border), transparent 15%);
       border-radius: 9999px;
-      padding: 2px 8px;
+      padding: 3px 10px;
       font-size: 12px;
+      font-weight: 500;
+      transition: background-color 0.2s, color 0.2s;
     }
+    .pill[data-type] { color: var(--primary); }
+    .pill[data-conf] { color: var(--success); }
+    .pill[data-sens] { color: var(--danger); }
     .actions {
       display: flex;
       justify-content: flex-end;
