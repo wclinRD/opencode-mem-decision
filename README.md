@@ -4,7 +4,7 @@ Cross-session persistent memory for [OpenCode](https://opencode.ai) 2.x agents.
 
 OpenCode sessions forget everything when they end. This plugin gives the agent a durable memory store: decisions, project facts, preferences, and reusable knowledge that survive restarts and can be recalled in later sessions.
 
-> **Status:** early implementation (`1.0.0`). Storage is JSON-based; semantic search and embeddings are not implemented yet. See [Feature status](#feature-status) before relying on a feature in production.
+> **Status:** version `1.0.0` with advanced integrations enabled. The plugin now supports vector embeddings, deduplication, encryption at rest, schema migrations, Markdown vault, project sharing, and a skills registry. See [Feature status](#feature-status) for details.
 
 ---
 
@@ -67,18 +67,22 @@ Example memory:
 | Credential / sensitive redaction | ✅ Implemented | Applied on write; sensitive items excluded from recall |
 | Memory classification & confidence | ✅ Implemented | Auto-classifies as fact/preference/rule/lesson/system |
 | Web server + Basic Auth | ✅ Implemented | Defaults to `127.0.0.1:4747` |
-| Auto-capture on session idle | ⚠️ Partial | Captures whole session text as one memory when `session.status.type === "idle"`; logs events and summaries |
-| Deduplication | ⚠️ Partial | Word-set Jaccard similarity, not embeddings |
+| Auto-capture on session idle | ✅ Implemented | Captures whole session text as one memory when `session.status.type === "idle"`; logs events and summaries |
+| Deduplication | ✅ Implemented | Vector similarity when embedding is available; falls back to word-set Jaccard / substring matching. Configurable via `duplicateDetection` |
 | Knowledge base | ✅ Implemented | Separate JSON file |
-| Dreaming / consolidation | ⚠️ Partial | Works when enabled; trash uses the storage directory |
+| Dreaming / consolidation | ✅ Implemented | Works when enabled; trash uses the storage directory |
 | Memory injection into prompts | ✅ Implemented | Dynamic injection budget, precedence rules |
 | Keyword search with filters | ✅ Implemented | Supports scope, type, confidence, timeRange |
-| Semantic search / embeddings | 🔲 Planned | Keyword matching only |
+| Semantic search / embeddings | ✅ Implemented | Local stub (768-dim token hash), remote OpenAI-compatible API, HuggingFace Inference. See [Embedding service](#embedding-service) |
+| Encryption at rest | ✅ Implemented | AES-256-GCM via `memory.encryption` in config (optional) |
+| Schema migrations | ✅ Implemented | JSON schema versioning and lock files |
+| Markdown Vault backend | ✅ Implemented | Selectable via `memoryBackend: "markdown"`; stores memories as `.md` with front matter |
 | Event logging | ✅ Implemented | Append-only events.log.json with summaries |
 | User profile | ✅ Implemented | Built from memories, rebuilt every N prompts |
+| Shared project memory | ✅ Implemented | Triggers on `.opencode-mem-project` marker; stored as `shared-project` scope |
+| Auto-extraction (AI/text) | ✅ Implemented | Extracts summary, topics, code snippets, decisions from captured sessions (stub or remote) |
+| Skills registry | ✅ Implemented | `src/skills.js` and `skill-*` tool modes; REST endpoints `/api/skills` |
 | Web UI | 🔲 Planned | HTTP API only |
-| Markdown Vault backend | 🔲 Planned | — |
-| Remote API backend | 🔲 Planned | — |
 
 ---
 
@@ -100,13 +104,15 @@ session.status (status.type === "idle")
 autoCapture()
      │  strip injected blocks, redact credentials and sensitive data
      │  classify content by type and confidence
-     │  compare with existing memories (Jaccard similarity)
+     │  detect duplicate using embeddings or word-set similarity
+     │  optionally run AI extraction (summary/topics/code/decisions)
+     │  check for `.opencode-mem-project` marker and tag shared memories
      │  log event to events.log.json, generate summary when threshold met
      ▼
 ~/.opencode-memory/memories.db.json
      │
      ├── memory tool (agent) ──► add / list / search / export / forget / profile
-     ├── web server ───────────► GET /api/memory, /api/stats, /api/profile, POST /api/dream
+     ├── web server ───────────► GET /api/memory, /api/stats, /api/profile, /api/skills, POST /api/dream
      └── dream mode ───────────► merge / supersede / update related memories
 ```
 
@@ -286,6 +292,27 @@ Full example:
 | `webServerAuthUsername` | `""` | Basic Auth username. Auth is enforced only when **both** username and password are set. |
 | `webServerAuthPassword` | `""` | Basic Auth password. |
 
+### Advanced options
+
+These options enable newer features and must be configured explicitly:
+
+| Option | Default | Effect |
+|---|---|---|
+| `duplicateDetection` | `{ enabled: true, similarityThreshold: 0.75, updateOnMatch: true }` | When adding or capturing a memory, compare against existing ones. With an embedding service it uses vector cosine similarity; otherwise it falls back to word-set Jaccard / substring matching. If a duplicate is found and `updateOnMatch` is `true`, the existing memory is updated instead of adding a new one; otherwise the capture is skipped. |
+| `embeddingModel` | `"Xenova/nomic-embed-text-v1"` | Model used for embeddings. If `embeddingApiUrl` is set, the plugin calls that remote `/v1/embeddings`. If no model starts with `Xenova/`, it falls back to HuggingFace Inference; otherwise it uses a local token-hash stub (768 dims). |
+| `embeddingApiUrl` | `""` | Remote OpenAI-compatible embeddings API base URL (no `/v1/embeddings` needed). |
+| `embeddingApiKey` | `""` | API key for the remote embeddings API. |
+| `extractionProvider` | `"stub"` | Auto-extraction provider: `"stub"`, `"openai-compatible"`, or `"huggingface"`. |
+| `extractionApiUrl` | `""` | Remote OpenAI-compatible chat completions API base URL used by extraction (no `/v1/chat/completions` needed). |
+| `extractionApiKey` | `""` | API key for the remote extraction API. |
+| `extractionModel` | `"gpt-4o-mini"` | Model name for remote extraction when `extractionProvider` is `"openai-compatible"`. |
+| `projectShared.enabled` | `true` | Detect `.opencode-mem-project` in the project tree; when present, mark captured memories as `shared-project` scope and tag them with `project:<name>`. |
+| `projectShared.markerFileName` | `".opencode-mem-project"` | File name to search upward from the current working directory. |
+| `memory.encryption.enabled` | `false` | Encrypt JSON storage files with AES-256-GCM using a password or environment variable. |
+| `memory.encryption.password` | `process.env.OPENCODE_MEM_PASSWORD || null` | Password for encryption. If unset, the process generates a session-only key and does not persist across restarts. |
+| `memoryBackend` | `"database"` | Storage backend to use: `"database"` (default JSON) or `"markdown"` (Vault). |
+| `markdownPath` | `null` | Custom directory for the Markdown vault. Falls back to `~/.opencode-memory/vault`. |
+
 ### Reserved options
 
 These are accepted and merged, but not used yet:
@@ -377,6 +404,45 @@ Limitations:
 - Auto-capture is disabled when `chatMessage.enabled` is `false`.
 - Sensitive memories are excluded from automatic recall to reduce leak risk.
 
+### Auto-extraction
+
+When `autoCapture` saves a memory, it also calls the configured extraction provider to extract structured information:
+
+```json
+{
+  "summary": "String summary of the session.",
+  "topics": ["topic1", "topic2"],
+  "codeSnippets": ["`...`"],
+  "decisions": ["decision1", "decision2"]
+}
+```
+
+The plugin stores these as supplementary memories with types `summary`, `decision`, or `code`, tagged `auto-extraction`. If a remote OpenAI-compatible or HuggingFace Inference endpoint is configured, it uses that; otherwise the local stub uses text heuristics.
+
+### Shared project memory
+
+Placing a file named `.opencode-mem-project` (default) in a project tree makes the plugin tag captured memories with `shared-project` scope and a `project:<name>` tag. Cross-project agents can then recall shared project memories by filtering on this scope or tag. The plugin searches upward from the current working directory for the marker file.
+
+### Skills registry
+
+The plugin maintains a separate skill library in `<storage>/skills.db.json`. Skills can be managed through the `memory` tool:
+
+```js
+memory({ mode: "skill-save", content: "Use pnpm", scope: "project" });
+memory({ mode: "skill-list", scope: "project", limit: 10 });
+memory({ mode: "skill-show", id: "skill_..." });
+memory({ mode: "skill-delete", id: "skill_..." });
+```
+
+The Web API offers:
+
+```sh
+curl http://127.0.0.1:4747/api/skills?scope=project&limit=20
+curl http://127.0.0.1:4747/api/skills/search?query=pnpm&scope=project
+curl -X POST http://127.0.0.1:4747/api/skills -H 'Content-Type: application/json' -d '{"content":"Use pnpm","scope":"project"}'
+curl -X DELETE http://127.0.0.1:4747/api/skills/...
+```
+
 ### Dreaming
 
 `dream` consolidates related memories:
@@ -409,11 +475,17 @@ The server starts automatically on `127.0.0.1:4747` unless `webServerHost` is em
 | `GET` | `/api/memory/:id` | Get one memory. |
 | `POST` | `/api/memory` | Add a memory. Body: `{ "content": "...", "scope": "project" }`. |
 | `DELETE` | `/api/memory/:id` | Delete a memory. |
+| `GET` | `/api/memory/search` | Search memories. Query string: `query`, `scope`, `type`, `confidence`, `timeRange`, `ttlDays`, `includeExpired`. |
 | `GET` | `/api/knowledge` | List knowledge entries. |
 | `GET` | `/api/stats` | Counts and timestamp. |
 | `GET` | `/api/profile` | Builds, persists and returns the user profile. |
 | `POST` | `/api/dream` | Runs consolidation and returns the result (or `skipped` when dreaming is disabled). |
-| `GET` | `/api/skills` | Returns `501` (not implemented). |
+| `GET` | `/api/skills` | List or add skills (see [Skills registry](#skills-registry)). |
+| `POST` | `/api/skills` | Add a skill. Body: `{ "content": "...", "scope": "global", "metadata": { ... } }`. |
+| `DELETE` | `/api/skills` | Delete all skills matching query and scope. |
+| `DELETE` | `/api/skills/:id` | Delete a single skill. |
+| `GET` | `/api/skills/search` | Search skills by query and scope. |
+| `GET` | `/api/events/summary` | Summarize recent events (hours query param). |
 
 ```sh
 curl http://127.0.0.1:4747/api/stats
@@ -442,9 +514,19 @@ Default location:
 ~/.opencode-memory/
 ├── memories.db.json
 ├── knowledge.db.json
+├── skills.db.json
 ├── trash.db.json
+├── events.log.json
 └── profile.json
 ```
+
+With `memoryBackend: "markdown"`, memories are stored in:
+
+```
+~/.opencode-memory/vault/<id>.md
+```
+
+Each vault file uses YAML front matter for metadata and plain text for the body.
 
 Tests and temporary runs can point storage elsewhere with `OPENCODE_MEM_DIR`:
 
@@ -452,7 +534,7 @@ Tests and temporary runs can point storage elsewhere with `OPENCODE_MEM_DIR`:
 OPENCODE_MEM_DIR=/tmp/opencode-mem-test node --test
 ```
 
-Memories file shape:
+Memory encryption (when configured) wraps the JSON files with an encrypted envelope, but the plaintext JSON shape remains compatible:
 
 ```json
 {
@@ -472,7 +554,7 @@ Memories file shape:
 
 Auto-capture records include `sessionId` so recall can skip the current session; memories added through the tool do not.
 
-The file is JSON, not a database. Concurrent writers are not locked. Do not edit it while OpenCode is writing.
+The file is JSON or Markdown, not a database. Concurrent writers are not locked. Do not edit it while OpenCode is writing.
 
 ---
 
@@ -500,8 +582,9 @@ Redaction is best-effort pattern matching, not a guarantee. Do not rely on it as
 
 **Storage**
 
-- Memories are stored unencrypted JSON on disk.
-- Database encryption at rest is not implemented.
+- Memories are stored in JSON or Markdown by default. Use `memoryBackend: "markdown"` to switch.
+- Database encryption at rest is optional and enabled via `memory.encryption`. It requires a password or `OPENCODE_MEM_PASSWORD`.
+- The plugin writes `skills.db.json`, `events.log.json`, and `profile.json`.
 - Restrict permissions on `~/.opencode-memory` if the machine is shared.
 
 ---
@@ -582,15 +665,23 @@ Project layout:
 .
 ├── index.js                 # re-exports the plugin definition
 ├── src/
-│   ├── plugin.js            # V2 Plugin.define + tool registration + session.execution.* auto-capture
+│   ├── plugin.js            # V2 Plugin.define + tool registration + session.idle auto-capture
 │   ├── config.js            # defaults and deep merge
-│   ├── capture.js           # auto-capture, similarity, deduplication
+│   ├── capture.js           # auto-capture, similarity, extraction, project-shared integration
 │   ├── inject.js            # recall, injection marker, strip helper
 │   ├── profile.js           # user profile build and prompt counting
 │   ├── dreaming.js          # consolidation and trash
 │   ├── security.js          # credential redaction
-│   ├── server.js            # HTTP API
-│   ├── storage/local.js     # JSON storage
+│   ├── server.js            # HTTP API with memory/knowledge/skills routes
+│   ├── storage/local.js     # JSON storage core
+│   ├── storage/markdown.js  # Markdown vault backend
+│   ├── storage/encryption.js# AES-256-GCM encrypted file handling
+│   ├── storage/migrations.js# schema versioning and lock files
+│   ├── embedding.js         # local and remote embedding service
+│   ├── extraction.js        # AI/text extraction service
+│   ├── dedup.js             # deduplication by vector or text
+│   ├── projectShared.js     # shared-project marker detection
+│   ├── skills.js            # skills registry storage
 │   └── tools/memoryTools.js # legacy tool helper
 ├── tests/                   # node:test unit tests
 └── doc/                     # design, handover, lessons learned
@@ -618,13 +709,15 @@ opencode service restart
 
 ## Roadmap
 
-1. Implement semantic search with embeddings (local or OpenAI-compatible).
-2. Replace JSON storage with libSQL/Turso and add migrations.
-3. AI-based capture: extract discrete decisions instead of whole-session blobs.
-4. Markdown Vault and Remote API backends.
-5. Web UI for browsing, editing, and restoring memories.
-6. Database encryption at rest and file locking.
-7. Integration and end-to-end tests.
+1. **Remote embeddings & vector similarity** are implemented as a local stub and remote API fallback; improve vector dimensions and accuracy.
+2. Replace JSON storage with libSQL/Turso and add migrations (core migration infrastructure exists).
+3. AI-based capture: extract discrete decisions instead of whole-session blobs (stub integration added; actual AI extraction needs provider support).
+4. Markdown Vault and Remote API backends are implemented; further optimize vault I/O and remote error handling.
+5. Web UI for browsing, editing, and restoring memories/skills.
+6. Database encryption at rest and file locking are implemented; verify with long-term use.
+7. Integration and end-to-end tests; browser automation and real OpenCode session tests.
+8. Shared skills registry improvements: tagging system, versioning, and export/import tools.
+9. Project-level shared memory sharing across processes and sessions via marker files.
 
 ---
 
