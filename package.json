@@ -1,0 +1,17 @@
+{
+  "name": "opencode-mem-decision",
+  "version": "1.0.0",
+  "description": "OpenCode Memory Plugin - cross-session persistent memory system for AI coding agents",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test"
+  },
+  "keywords": ["opencode", "plugin", "memory", "ai"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.0.0"
+  }
+}
