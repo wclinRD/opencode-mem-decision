@@ -54,8 +54,19 @@
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
 - [x] Auto-Capture AI 提取 stub（provider structured output）：整合 `src/extraction.js`，在 auto-capture 產生 summary/decisions/codeSnippets 記憶。
 - [x] User Profile 自動更新（每 N 個 prompts）：`src/profile.js` 的 `recordPrompt` 已實現 promptCount 累計與 interval 時重建，`src/plugin.js` 於每次 prompt hook 觸發。
-- [ ] Shared project memory via `.opencode-mem-project`: 已實作 projectShared.js 讀寫標記與 shared-project scope。
+- [x] Shared project memory via `.opencode-mem-project`: 已實作 projectShared.js 讀寫標記與 shared-project scope。
 - [x] Shared skills registry + REST API: 建立 `src/skills.js`，`plugin.js` 支援 skill-list/show/save/delete modes，`server.js` 提供 `/api/skills` 與 `/api/skills/search` 路由。
+
+### Step 6：Web UI 設定頁面與設定更新
+
+- [ ] 新增 `GET /api/config`（安全回傳 config，隱藏敏感值如 API key/password）。
+- [ ] 新增 `POST /api/config`（寫回 plugin config 檔，並更新 server 監聽 port/Host）。
+- [ ] `src/server.js` 支持 `configPath` 參數（預設 `~/.config/opencode/plugins/opencode-mem-decision/config.json`）以讀寫設定檔。
+- [ ] `src/plugin.js` 計算 `configPath`（優先 `ctx.storeDir/config.json`，否則 fallback）並傳入 `createWebServer`。
+- [ ] `src/static/ui.html` 新增 Settings tab，包含 Web Server、Embedding、Extraction、Duplicate Detection、Markdown Vault、Encryption、Project Shared、Dreaming、Auto-capture、Profile、Event log 等控制項與表單驗證。
+- [ ] 測試：`tests/server.config.test.js`，驗證 config read/write、敏感值隱藏、設定更新流程。
+- [ ] 更新 `doc/handover.md` 與 `README.md`（標明 Web UI 為實作，說明設定頁功能）。
+- [ ] `git add -A && npm test && git commit`。
 
 ## 優先級建議
 
