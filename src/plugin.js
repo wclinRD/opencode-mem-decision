@@ -10,6 +10,7 @@ import { classifyMemory } from "./classify.js";
 import { EmbeddingService } from "./embedding.js";
 import { ExtractionService } from "./extraction.js";
 import { setEmbeddingService } from "./storage/local.js";
+import { skillsStorage } from "./skills.js";
 
 // Sessions that already received the one-shot injection. Module level because
 // the hook registration lives for the whole process.
@@ -19,6 +20,7 @@ const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
   "export", "import", "list-shards", "dream", "restore-trash",
   "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete",
+  "skill-list", "skill-show", "skill-save", "skill-delete",
 ];
 
 // V2 tools take JSON Schema, not a schema builder.
@@ -73,6 +75,14 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
   if (!mode) throw new Error("mode is required");
 
   // Memory modes
+  if (mode.startsWith("skill-")) {
+    const sm = mode.replace("skill-", "");
+    if (sm === "list") return skillsStorage.listSkills(args.scope || "global", args.limit || 100);
+    if (sm === "show") return skillsStorage.getSkill(args.id);
+    if (sm === "save") return skillsStorage.addSkill(args.content, args.scope || "global", args.metadata || {});
+    if (sm === "delete") return skillsStorage.deleteSkill(args.id);
+    throw new Error(`Unknown skill mode: ${sm}`);
+  }
   if (mode.startsWith("knowledge-")) {
     const km = mode.replace("knowledge-", "");
     if (km === "list") return storage.listKnowledge();

@@ -510,6 +510,13 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `capture.js::autoCapture` 在加入記憶時檢測 project marker，有標記則儲存為 `shared-project` scope，並附加 `project:<name>` 標籤。
 - [x] 測試：`tests/projectShared.test.js`（5 個測試），全部 89/89 通過。
 
+## Shared skills registry + REST API（2026-11-05）
+
+- [x] 建立 `src/skills.js`：`skillsStorage` 提供 `addSkill`、`listSkills`、`getSkill`、`updateSkill`、`deleteSkill`、`searchSkills`，資料存於 `<storage>/skills.db.json`。
+- [x] `src/plugin.js` 新增 `skill-list`、`skill-show`、`skill-save`、`skill-delete` 模式，由 `runMemoryMode` 路由至 `skillsStorage`。
+- [x] `src/server.js` 實作 `GET /api/skills`、`GET /api/skills/search`、`POST /api/skills`、`DELETE /api/skills`、`DELETE /api/skills/:id` 等 REST 路由。
+- [x] 測試：`tests/skills.test.js`（3 個測試），全部 92/92 通過。
+
 ## 下一步
 
 1. 確認功能模組清單無誤。

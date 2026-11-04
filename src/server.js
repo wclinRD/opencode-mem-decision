@@ -7,6 +7,7 @@ import { buildProfile } from "./profile.js";
 import { runDreaming } from "./dreaming.js";
 import { summarizeRecentEvents } from "./eventLog.js";
 import { loadConfig } from "./config.js";
+import { skillsStorage } from "./skills.js";
 
 const UI_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "static", "ui.html");
 
@@ -121,8 +122,39 @@ export function createWebServer({ memoryConfig, storage }) {
         sendJson(res, 200, await buildProfile({ memoryConfig, storage }));
       } else if (path === "/api/dream" && method === "POST") {
         sendJson(res, 200, await runDreaming({ memoryConfig, storage }));
-      } else if (path.match(/^\/api\/skills/) && method === "GET") {
-        sendJson(res, 501, { error: "Skills registry not yet implemented" });
+      } else if (path === "/api/skills" && method === "GET") {
+        const scope = url.searchParams.get("scope") || "global";
+        const limit = Number(url.searchParams.get("limit") || 100);
+        sendJson(res, 200, await skillsStorage.listSkills(scope, limit));
+      } else if (path === "/api/skills/search" && method === "GET") {
+        const query = url.searchParams.get("query") || "";
+        const scope = url.searchParams.get("scope") || "global";
+        sendJson(res, 200, await skillsStorage.searchSkills(query, scope));
+      } else if (path === "/api/skills" && method === "POST") {
+        const body = await parseBody(req);
+        sendJson(res, 201, await skillsStorage.addSkill(body.content, body.scope || "global", body.metadata));
+      } else if (path === "/api/skills" && method === "DELETE") {
+        const scope = url.searchParams.get("scope") || "global";
+        const query = url.searchParams.get("query") || "";
+        const matched = await skillsStorage.searchSkills(query, scope);
+        for (const skill of matched) {
+          await skillsStorage.deleteSkill(skill.id);
+        }
+        sendJson(res, 200, { deleted: matched.length });
+      } else if (path.match(/^\/api\/skills\/[^/]+$/) && method === "DELETE") {
+        const id = path.split("/").pop();
+        sendJson(res, 200, { deleted: await skillsStorage.deleteSkill(id) });
+      } else if (path === "/api/skills/search" && method === "DELETE") {
+        const scope = url.searchParams.get("scope") || "global";
+        const query = url.searchParams.get("query") || "";
+        const matched = await skillsStorage.searchSkills(query, scope);
+        for (const skill of matched) {
+          await skillsStorage.deleteSkill(skill.id);
+        }
+        sendJson(res, 200, { deleted: matched.length });
+      } else if (path.match(/^\/api\/skills\/[^/]+$/) && method === "GET") {
+        const id = path.split("/").pop();
+        sendJson(res, 200, await skillsStorage.getSkill(id));
       } else {
         sendJson(res, 404, { error: "Not found" });
       }
