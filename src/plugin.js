@@ -1,5 +1,5 @@
 import { Plugin } from "@opencode/plugin";
-import { loadConfig } from "./config.js";
+import { loadConfig, getMemoryBackend } from "./config.js";
 import { autoCapture, filterSessionText } from "./capture.js";
 import { runDreaming } from "./dreaming.js";
 import { createWebServer, releaseWebServer } from "./server.js";
@@ -137,7 +137,8 @@ export default Plugin.define({
   id: "opencode-mem-decision",
   async setup(ctx) {
     const memoryConfig = loadConfig(ctx.options || {});
-    const { localStorage } = await import("./storage/local.js");
+    const backend = getMemoryBackend(memoryConfig);
+    let storage;
 
     // Initialize encryption if configured
     const { initEncryption } = await import("./storage/local.js");
@@ -151,11 +152,21 @@ export default Plugin.define({
     const embeddingService = new EmbeddingService(memoryConfig);
     setEmbeddingService(embeddingService);
 
+    if (backend === "markdown") {
+      console.log("[opencode-mem-decision] using Markdown Vault backend");
+      const { markdownStorage } = await import("./storage/markdown.js");
+      storage = markdownStorage;
+    } else {
+      console.log("[opencode-mem-decision] using database backend");
+      const { localStorage } = await import("./storage/local.js");
+      storage = localStorage;
+    }
+
     const cleanups = [];
 
     if (memoryConfig.webServerHost) {
       try {
-        const server = createWebServer({ memoryConfig, storage: localStorage });
+        const server = createWebServer({ memoryConfig, storage });
         cleanups.push(() => releaseWebServer(server));
       } catch (error) {
         console.error(`[opencode-mem-decision] web server failed to start: ${error.message}`);
@@ -168,7 +179,7 @@ export default Plugin.define({
         description: "Manage cross-session memories and knowledge",
         input: MEMORY_TOOL_INPUT,
         execute: async (input) =>
-          toToolResult(await runMemoryMode(input || {}, { storage: localStorage, memoryConfig })),
+          toToolResult(await runMemoryMode(input || {}, { storage, memoryConfig })),
       });
     });
 
@@ -177,7 +188,7 @@ export default Plugin.define({
         if (!memoryConfig.chatMessage?.enabled) return;
         if (!event?.prompt || typeof event.prompt.text !== "string") return;
 
-        void recordPrompt({ storage: localStorage, memoryConfig }).catch(() => {});
+        void recordPrompt({ storage, memoryConfig }).catch(() => {});
 
         const injectOn = memoryConfig.chatMessage.injectOn || "first";
         const sessionID = event.sessionID;
@@ -193,7 +204,7 @@ export default Plugin.define({
         const memories = await injectMemories({
           sessionData: { id: sessionID, latestMessage: event.prompt.text },
           memoryConfig,
-          storage: localStorage,
+          storage,
           contextWindowSize: memoryConfig.chatMessage?.contextWindowSize || 128000,
         });
         const fillRatio = calculateFillRatio(event.prompt.text, memoryConfig.chatMessage?.contextWindowSize || 128000);
@@ -253,7 +264,7 @@ export default Plugin.define({
             const action = await autoCapture({
               sessionData: { id: sessionID, messages: [{ content: rawText }] },
               memoryConfig,
-              storage: localStorage,
+              storage,
               classifyMemory: () => classified,
             });
             console.log(`[opencode-mem-decision] auto-capture action:`, action);

@@ -462,6 +462,16 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] 測試：`tests/migrations.test.js` 包含版本預設、`ensureSchema` 升級以及讀寫一致性測試。
 - [x] 測試總數：76 全部通過。
 
+## Markdown Vault Backend（2026-11-04）
+
+- [x] 建立 `src/storage/markdown.js`，以 `vault/` 目錄下的 `.md` 檔案儲存記憶：
+  - `createFrontMatter` 生成 front matter（metadata）與純文字內容。
+  - `parseFrontMatter` 解析 front matter 與內容，合併回傳 `metadata` 與 `content` 的平層物件。
+  - 支援 `addMemory`、`searchMemories`（字串搜尋）、`listMemories`、`getMemory`、`updateMemory`、`deleteMemory`、`listAllMemories`。
+- [x] `src/plugin.js` 引入 `getMemoryBackend`，依 `memoryBackend`（`database`/`markdown`）選擇 `localStorage` 或 `markdownStorage`。
+- [x] 測試：`tests/markdown.test.js` 包含 4 個測試，全部通過。
+- [x] 目前測試總數：80 全部通過。
+
 詳細待辦與計畫參見 [`todo.md`](../todo.md)。
 
 ## 下一步

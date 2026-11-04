@@ -43,9 +43,10 @@
 - [x] `src/plugin.js` 初始化 embedding service 並註冊至 storage。
 - [x] 建立 Database encryption at rest：在 `config.js` 加入 `memory.encryption`，`local.js` 使用 `AES-256-GCM` 加密/解密儲存檔（支援 salt 重現與未加密相容讀取）。
 - [x] 建立 Schema migrations：`src/storage/migrations.js` 實作 `ensureSchema`、`readVersion`、`writeVersion`、鎖定與解鎖，確保 schema 升級與相容性。
-- [x] 測試：76/76 通過（`embedding.test.js`、`migrations.test.js`、`storage.test.js`）。
+- [x] 建立 Markdown Vault backend：`src/storage/markdown.js`，支援以 markdown front matter 儲存記憶，並完成 `addMemory`、`searchMemories`、`listMemories`、`getMemory`、`updateMemory`、`deleteMemory`。
+- [x] `src/plugin.js` 依 `memoryBackend` 選擇 backend（`database` 或 `markdown`）。
+- [x] 測試：80/80 通過（`embedding.test.js`、`migrations.test.js`、`markdown.test.js`、`storage.test.js`）。
 
-- [ ] Markdown Vault backend。
 - [ ] Remote API backend（OpenAI-compatible embeddings）。
 - [ ] Auto-Capture AI 提取 stub（provider structured output）。
 - [ ] User Profile 自動更新（每 N 個 prompts）。
