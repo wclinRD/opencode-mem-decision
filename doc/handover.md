@@ -379,6 +379,7 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - 範圍篩選器：從所有記憶動態提取 unique scopes，搜尋時支援限定單一 scope 與所有範圍。
 - 排序：依建立時間新到舊或舊到新排序（前端 sort）。
 - 排版： Sticky header、卡片陰影與 hover、pill badge、響應式網格、form 與搜尋列優化。
+- 批量刪除：`DELETE /api/memory?query=<q>&scope=<s>`，UI 提供「Delete All by Filter」按鈕，僅在輸入查詢或選定 scope 時啟用。
 
 ### 限制
 
