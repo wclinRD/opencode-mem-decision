@@ -390,6 +390,15 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - 目前沒有 React/Vite，只有原生 HTML/JS。
 - 搜尋是關鍵字比對，不是 embedding；中文 token 以連續漢字為單位。
 - 未實作 memory–prompt timeline、user profile 管理等進階介面。
+- Web UI 設定頁目前可載入與保存設定，敏感值（如 API key、password）一律不返回給前端。
+
+## Web UI 設定頁與設定更新 API (2026-11-05)
+
+- [x] 新增 `GET /api/config`：回傳完整設定，敏感欄位（`webServerAuthPassword`、`embeddingApiKey`、`extractionApiKey`、`memory.encryption.password`）一律以 `***` 遮蔽。
+- [x] 新增 `POST /api/config`：接合前端設定表單，寫回 plugin 的 `config.json`，並回傳遮蔽敏感值後的設定。
+- [x] `src/plugin.js` 計算設定檔路徑（`ctx.storeDir/config.json`，fallback 至 `~/.config/opencode/plugins/opencode-mem-decision/config.json`），並傳入 `createWebServer`。
+- [x] `src/server.js` 接收 `configPath`，讀寫設定檔並提供設定 API。
+- [x] `src/static/ui.html` 新增 Settings 分頁，包含 Web Server、Embedding、Extraction、Duplicate Detection、Markdown Vault、Encryption、Project Shared、Dreaming、Auto-capture、User Profile、Event Log、Memory TTL 等控制項與表單驗證。
 
 ## 參考資源
 

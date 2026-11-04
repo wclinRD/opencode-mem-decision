@@ -1,6 +1,8 @@
 import http from "http";
-import fs from "fs/promises";
+import fs from "fs";
+import * as fsPromises from "fs/promises";
 import path from "path";
+import os from "os";
 import { fileURLToPath } from "url";
 import { localStorage } from "./storage/local.js";
 import { buildProfile } from "./profile.js";
@@ -8,6 +10,31 @@ import { runDreaming } from "./dreaming.js";
 import { summarizeRecentEvents } from "./eventLog.js";
 import { loadConfig } from "./config.js";
 import { skillsStorage } from "./skills.js";
+
+const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "opencode", "plugins", "opencode-mem-decision", "config.json");
+
+function readConfigFile(configPath) {
+  try {
+    const content = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(content);
+    return loadConfig(parsed);
+  } catch (e) {
+    return loadConfig();
+  }
+}
+
+function maskSensitiveConfig(config) {
+  const masked = { ...config };
+  if (masked.memory?.encryption?.password) masked.memory.encryption.password = "***";
+  if (masked.webServerAuthPassword) masked.webServerAuthPassword = "***";
+  if (masked.embeddingApiKey) masked.embeddingApiKey = "***";
+  if (masked.extractionApiKey) masked.extractionApiKey = "***";
+  return masked;
+}
+
+function saveConfigFile(configPath, config) {
+  return fsPromises.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+}
 
 const UI_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "static", "ui.html");
 
@@ -26,8 +53,8 @@ function parseBody(req) {
   });
 }
 
-function sendJson(res, status, data) {
-  res.writeHead(status, { "Content-Type": "application/json" });
+function sendJson(res, status, data, extraHeaders = {}) {
+  res.writeHead(status, { "Content-Type": "application/json", ...extraHeaders });
   res.end(JSON.stringify(data));
 }
 
@@ -43,7 +70,7 @@ function basicAuth(req, username, password) {
 // own copy of the plugin, but a single process may set it up more than once.
 let sharedServer = null;
 
-export function createWebServer({ memoryConfig, storage }) {
+export function createWebServer({ memoryConfig, storage, configPath }) {
   const host = memoryConfig.webServerHost;
   const port = memoryConfig.webServerPort || 4747;
   const key = `${host}:${port}`;
@@ -56,8 +83,7 @@ export function createWebServer({ memoryConfig, storage }) {
   const server = http.createServer(async (req, res) => {
     const { webServerAuthUsername, webServerAuthPassword } = memoryConfig;
     if (!basicAuth(req, webServerAuthUsername, webServerAuthPassword)) {
-      res.writeHead(401, { "WWW-Authenticate": 'Basic realm="OpenCode Memory"' });
-      sendJson(res, 401, { error: "Unauthorized" });
+      sendJson(res, 401, { error: "Unauthorized" }, { "WWW-Authenticate": 'Basic realm="OpenCode Memory"' });
       return;
     }
 
@@ -67,7 +93,7 @@ export function createWebServer({ memoryConfig, storage }) {
 
     try {
       if (path === "/" || path === "/index.html") {
-        const html = await fs.readFile(UI_FILE, "utf-8");
+        const html = await fsPromises.readFile(UI_FILE, "utf-8");
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(html);
       } else if (path === "/api/memory" && method === "GET") {
@@ -86,6 +112,21 @@ export function createWebServer({ memoryConfig, storage }) {
           knowledge: (await storage.listKnowledge()).length,
           timestamp: new Date().toISOString(),
         });
+      } else if (path === "/api/config" && method === "GET") {
+        const fullConfig = readConfigFile(configPath || DEFAULT_CONFIG_PATH);
+        sendJson(res, 200, maskSensitiveConfig(fullConfig));
+      } else if (path === "/api/config" && method === "POST") {
+        const body = await parseBody(req);
+        const current = readConfigFile(configPath || DEFAULT_CONFIG_PATH);
+        const merged = {
+          ...current,
+          ...body,
+          chatMessage: { ...current.chatMessage, ...(body.chatMessage || {}) },
+          dreaming: { ...current.dreaming, ...(body.dreaming || {}) },
+          memory: { ...current.memory, ...(body.memory || {}) },
+        };
+        await saveConfigFile(configPath || DEFAULT_CONFIG_PATH, merged);
+        sendJson(res, 200, { saved: true, config: maskSensitiveConfig(merged) });
       } else if (path === "/api/memory/search" && method === "GET") {
         const query = url.searchParams.get("query") || "";
         const scope = url.searchParams.get("scope") || "default";

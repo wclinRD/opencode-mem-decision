@@ -11,6 +11,8 @@ import { EmbeddingService } from "./embedding.js";
 import { ExtractionService } from "./extraction.js";
 import { setEmbeddingService } from "./storage/local.js";
 import { skillsStorage } from "./skills.js";
+import path from "path";
+import os from "os";
 
 // Sessions that already received the one-shot injection. Module level because
 // the hook registration lives for the whole process.
@@ -181,7 +183,9 @@ export default Plugin.define({
 
     if (memoryConfig.webServerHost) {
       try {
-        const server = createWebServer({ memoryConfig, storage });
+        const storeDir = ctx.storeDir || path.join(os.homedir(), ".config", "opencode", "plugins", "opencode-mem-decision");
+        const configPath = path.join(storeDir, "config.json");
+        const server = createWebServer({ memoryConfig, storage, configPath });
         cleanups.push(() => releaseWebServer(server));
       } catch (error) {
         console.error(`[opencode-mem-decision] web server failed to start: ${error.message}`);

@@ -329,6 +329,7 @@
       <button class="tab active" data-view="memories">Memories</button>
       <button class="tab" data-view="knowledge">Knowledge</button>
       <button class="tab" data-view="events">Event Summaries</button>
+      <button class="tab" data-view="settings">Settings</button>
     </div>
 
     <div id="memoriesView">
@@ -398,6 +399,100 @@
     <div id="eventsView" style="display: none;">
       <h2 class="section-title">Event Summaries</h2>
       <div id="eventSummaries" class="grid"></div>
+    </div>
+
+    <div id="settingsView" style="display: none;">
+      <div class="controls">
+        <button id="loadConfigBtn" class="secondary">Load Config</button>
+        <button id="saveConfigBtn" class="primary">Save Config</button>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Web Server</h3>
+        <div class="field"><label for="settings-webServerHost">Host</label><input id="settings-webServerHost" type="text" /></div>
+        <div class="field"><label for="settings-webServerPort">Port</label><input id="settings-webServerPort" type="number" min="1" max="65535" /></div>
+        <div class="field"><label for="settings-webServerAuthUsername">Auth Username</label><input id="settings-webServerAuthUsername" type="text" /></div>
+        <div class="field"><label for="settings-webServerAuthPassword">Auth Password</label><input id="settings-webServerAuthPassword" type="password" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Embedding</h3>
+        <div class="field"><label for="settings-embeddingModel">Model</label><input id="settings-embeddingModel" type="text" /></div>
+        <div class="field"><label for="settings-embeddingApiUrl">API URL</label><input id="settings-embeddingApiUrl" type="text" /></div>
+        <div class="field"><label for="settings-embeddingApiKey">API Key</label><input id="settings-embeddingApiKey" type="password" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Extraction</h3>
+        <div class="field"><label for="settings-extractionProvider">Provider</label><input id="settings-extractionProvider" type="text" /></div>
+        <div class="field"><label for="settings-extractionApiUrl">API URL</label><input id="settings-extractionApiUrl" type="text" /></div>
+        <div class="field"><label for="settings-extractionApiKey">API Key</label><input id="settings-extractionApiKey" type="password" /></div>
+        <div class="field"><label for="settings-extractionModel">Model</label><input id="settings-extractionModel" type="text" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Duplicate Detection</h3>
+        <div class="field"><label for="settings-duplicateDetection.enabled">Enabled</label><input id="settings-duplicateDetection.enabled" type="checkbox" /></div>
+        <div class="field"><label for="settings-duplicateDetection.similarityThreshold">Similarity Threshold</label><input id="settings-duplicateDetection.similarityThreshold" type="number" min="0" max="1" step="0.01" /></div>
+        <div class="field"><label for="settings-duplicateDetection.updateOnMatch">Update On Match</label><input id="settings-duplicateDetection.updateOnMatch" type="checkbox" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Markdown Vault</h3>
+        <div class="field"><label for="settings-memoryBackend">Backend</label><select id="settings-memoryBackend"><option value="database">Database</option><option value="markdown">Markdown Vault</option></select></div>
+        <div class="field"><label for="settings-markdownPath">Vault Path</label><input id="settings-markdownPath" type="text" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Encryption</h3>
+        <div class="field"><label for="settings-memory.encryption.enabled">Enabled</label><input id="settings-memory.encryption.enabled" type="checkbox" /></div>
+        <div class="field"><label for="settings-memory.encryption.password">Password</label><input id="settings-memory.encryption.password" type="password" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Project Shared</h3>
+        <div class="field"><label for="settings-projectShared.enabled">Enabled</label><input id="settings-projectShared.enabled" type="checkbox" /></div>
+        <div class="field"><label for="settings-projectShared.markerFileName">Marker File Name</label><input id="settings-projectShared.markerFileName" type="text" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Dreaming</h3>
+        <div class="field"><label for="settings-dreaming.enabled">Enabled</label><input id="settings-dreaming.enabled" type="checkbox" /></div>
+        <div class="field"><label for="settings-dreaming.relatedThreshold">Related Threshold</label><input id="settings-dreaming.relatedThreshold" type="number" min="0" max="1" step="0.01" /></div>
+        <div class="field"><label for="settings-dreaming.crossProject">Cross Project</label><input id="settings-dreaming.crossProject" type="checkbox" /></div>
+        <div class="field"><label for="settings-dreaming.trashRetentionDays">Trash Retention Days</label><input id="settings-dreaming.trashRetentionDays" type="number" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Auto-Capture</h3>
+        <div class="field"><label for="settings-chatMessage.enabled">Enabled</label><input id="settings-chatMessage.enabled" type="checkbox" /></div>
+        <div class="field"><label for="settings-chatMessage.injectOn">Inject On</label><input id="settings-chatMessage.injectOn" type="text" /></div>
+        <div class="field"><label for="settings-chatMessage.recall">Recall</label><input id="settings-chatMessage.recall" type="text" /></div>
+        <div class="field"><label for="settings-chatMessage.recallScope">Recall Scope</label><input id="settings-chatMessage.recallScope" type="text" /></div>
+        <div class="field"><label for="settings-chatMessage.maxMemories">Max Memories</label><input id="settings-chatMessage.maxMemories" type="number" /></div>
+        <div class="field"><label for="settings-chatMessage.excludeCurrentSession">Exclude Current Session</label><input id="settings-chatMessage.excludeCurrentSession" type="checkbox" /></div>
+        <div class="field"><label for="settings-chatMessage.filterInjectedPrompts">Filter Injected Prompts</label><input id="settings-chatMessage.filterInjectedPrompts" type="checkbox" /></div>
+        <div class="field"><label for="settings-chatMessage.contextWindowSize">Context Window Size</label><input id="settings-chatMessage.contextWindowSize" type="number" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">User Profile</h3>
+        <div class="field"><label for="settings-userProfileAnalysisInterval">Analysis Interval</label><input id="settings-userProfileAnalysisInterval" type="number" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Event Log</h3>
+        <div class="field"><label for="settings-eventLog.enabled">Enabled</label><input id="settings-eventLog.enabled" type="checkbox" /></div>
+        <div class="field"><label for="settings-eventLog.summaryHours">Summary Hours</label><input id="settings-eventLog.summaryHours" type="number" /></div>
+      </div>
+
+      <div class="form-card">
+        <h3 class="section-title">Advanced: Memory TTL</h3>
+        <div class="field"><label for="settings-memory.ttl.defaultDays">Default Days</label><input id="settings-memory.ttl.defaultDays" type="number" /></div>
+        <div class="field"><label for="settings-memory.ttl.factDays">Fact Days</label><input id="settings-memory.ttl.factDays" type="number" /></div>
+        <div class="field"><label for="settings-memory.ttl.lowPriorityDays">Low Priority Days</label><input id="settings-memory.ttl.lowPriorityDays" type="number" /></div>
+        <div class="field"><label for="settings-memory.ttl.sensitiveDays">Sensitive Days</label><input id="settings-memory.ttl.sensitiveDays" type="number" /></div>
+      </div>
     </div>
   </main>
 
@@ -588,9 +683,11 @@
     const tabs = document.querySelectorAll('#viewTabs .tab');
     const memoriesView = document.getElementById('memoriesView');
     const knowledgeView = document.getElementById('knowledgeView');
+    const settingsView = document.getElementById('settingsView');
     let activeView = 'memories';
     let knowledgeLoaded = false;
     let eventsLoaded = false;
+    let settingsLoaded = false;
 
     function switchView(view) {
       if (activeView === view) return;
@@ -602,11 +699,13 @@
         memoriesView.style.display = 'block';
         knowledgeView.style.display = 'none';
         eventsView.style.display = 'none';
+        settingsView.style.display = 'none';
         loadMemories();
       } else if (view === 'knowledge') {
         memoriesView.style.display = 'none';
         knowledgeView.style.display = 'block';
         eventsView.style.display = 'none';
+        settingsView.style.display = 'none';
         if (!knowledgeLoaded) {
           loadKnowledge();
           knowledgeLoaded = true;
@@ -615,9 +714,19 @@
         memoriesView.style.display = 'none';
         knowledgeView.style.display = 'none';
         eventsView.style.display = 'block';
+        settingsView.style.display = 'none';
         if (!eventsLoaded) {
           loadEventsSummary();
           eventsLoaded = true;
+        }
+      } else if (view === 'settings') {
+        memoriesView.style.display = 'none';
+        knowledgeView.style.display = 'none';
+        eventsView.style.display = 'none';
+        settingsView.style.display = 'block';
+        if (!settingsLoaded) {
+          loadSettings();
+          settingsLoaded = true;
         }
       }
     }
@@ -699,6 +808,143 @@
         toast("Error: " + e.message, "error");
       }
     }
+
+    async function loadSettings() {
+      try {
+        const config = await request("/config");
+        populateSettingsForm(config);
+      } catch (e) {
+        toast("Error loading config: " + e.message, "error");
+      }
+    }
+
+    function populateSettingsForm(config) {
+      const setVal = (id, value) => {
+        const el = document.getElementById("settings-" + id);
+        if (!el) return;
+        if (el.type === "checkbox") {
+          el.checked = Boolean(value);
+        } else if (el.type === "number") {
+          el.value = value ?? "";
+        } else {
+          el.value = value ?? "";
+        }
+      };
+      setVal("webServerHost", config.webServerHost);
+      setVal("webServerPort", config.webServerPort);
+      setVal("webServerAuthUsername", config.webServerAuthUsername);
+      setVal("webServerAuthPassword", config.webServerAuthPassword);
+      setVal("embeddingModel", config.embeddingModel);
+      setVal("embeddingApiUrl", config.embeddingApiUrl);
+      setVal("embeddingApiKey", config.embeddingApiKey);
+      setVal("extractionProvider", config.extractionProvider);
+      setVal("extractionApiUrl", config.extractionApiUrl);
+      setVal("extractionApiKey", config.extractionApiKey);
+      setVal("extractionModel", config.extractionModel);
+      setVal("duplicateDetection.enabled", config.duplicateDetection?.enabled);
+      setVal("duplicateDetection.similarityThreshold", config.duplicateDetection?.similarityThreshold);
+      setVal("duplicateDetection.updateOnMatch", config.duplicateDetection?.updateOnMatch);
+      setVal("memoryBackend", config.memoryBackend);
+      setVal("markdownPath", config.markdownPath);
+      setVal("memory.encryption.enabled", config.memory?.encryption?.enabled);
+      setVal("memory.encryption.password", config.memory?.encryption?.password);
+      setVal("projectShared.enabled", config.projectShared?.enabled);
+      setVal("projectShared.markerFileName", config.projectShared?.markerFileName);
+      setVal("dreaming.enabled", config.dreaming?.enabled);
+      setVal("dreaming.relatedThreshold", config.dreaming?.relatedThreshold);
+      setVal("dreaming.crossProject", config.dreaming?.crossProject);
+      setVal("dreaming.trashRetentionDays", config.dreaming?.trashRetentionDays);
+      setVal("chatMessage.enabled", config.chatMessage?.enabled);
+      setVal("chatMessage.injectOn", config.chatMessage?.injectOn);
+      setVal("chatMessage.recall", config.chatMessage?.recall);
+      setVal("chatMessage.recallScope", config.chatMessage?.recallScope);
+      setVal("chatMessage.maxMemories", config.chatMessage?.maxMemories);
+      setVal("chatMessage.excludeCurrentSession", config.chatMessage?.excludeCurrentSession);
+      setVal("chatMessage.filterInjectedPrompts", config.chatMessage?.filterInjectedPrompts);
+      setVal("chatMessage.contextWindowSize", config.chatMessage?.contextWindowSize);
+      setVal("userProfileAnalysisInterval", config.userProfileAnalysisInterval);
+      setVal("eventLog.enabled", config.eventLog?.enabled);
+      setVal("eventLog.summaryHours", config.eventLog?.summaryHours);
+      setVal("memory.ttl.defaultDays", config.memory?.ttl?.defaultDays);
+      setVal("memory.ttl.factDays", config.memory?.ttl?.factDays);
+      setVal("memory.ttl.lowPriorityDays", config.memory?.ttl?.lowPriorityDays);
+      setVal("memory.ttl.sensitiveDays", config.memory?.ttl?.sensitiveDays);
+    }
+
+    async function saveSettings() {
+      const buildValue = (id) => {
+        const el = document.getElementById("settings-" + id);
+        if (!el) return undefined;
+        if (el.type === "checkbox") return el.checked;
+        if (el.type === "number") return el.value === "" ? undefined : Number(el.value);
+        return el.value || undefined;
+      };
+
+      const setVal = (obj, keys, value) => {
+        if (value === undefined) return;
+        let last = obj;
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!(keys[i] in last)) last[keys[i]] = {};
+          last = last[keys[i]];
+        }
+        last[keys[keys.length - 1]] = value;
+      };
+
+      const config = {};
+      setVal(config, ["webServerHost"], buildValue("webServerHost"));
+      setVal(config, ["webServerPort"], buildValue("webServerPort"));
+      setVal(config, ["webServerAuthUsername"], buildValue("webServerAuthUsername"));
+      setVal(config, ["webServerAuthPassword"], buildValue("webServerAuthPassword"));
+      setVal(config, ["embeddingModel"], buildValue("embeddingModel"));
+      setVal(config, ["embeddingApiUrl"], buildValue("embeddingApiUrl"));
+      setVal(config, ["embeddingApiKey"], buildValue("embeddingApiKey"));
+      setVal(config, ["extractionProvider"], buildValue("extractionProvider"));
+      setVal(config, ["extractionApiUrl"], buildValue("extractionApiUrl"));
+      setVal(config, ["extractionApiKey"], buildValue("extractionApiKey"));
+      setVal(config, ["extractionModel"], buildValue("extractionModel"));
+      setVal(config, ["duplicateDetection"], buildValue("duplicateDetection.enabled"));
+      setVal(config, ["duplicateDetection", "similarityThreshold"], buildValue("duplicateDetection.similarityThreshold"));
+      setVal(config, ["duplicateDetection", "updateOnMatch"], buildValue("duplicateDetection.updateOnMatch"));
+      setVal(config, ["memoryBackend"], buildValue("memoryBackend"));
+      setVal(config, ["markdownPath"], buildValue("markdownPath"));
+      setVal(config, ["memory", "encryption", "enabled"], buildValue("memory.encryption.enabled"));
+      setVal(config, ["memory", "encryption", "password"], buildValue("memory.encryption.password"));
+      setVal(config, ["memory", "ttl", "defaultDays"], buildValue("memory.ttl.defaultDays"));
+      setVal(config, ["memory", "ttl", "factDays"], buildValue("memory.ttl.factDays"));
+      setVal(config, ["memory", "ttl", "lowPriorityDays"], buildValue("memory.ttl.lowPriorityDays"));
+      setVal(config, ["memory", "ttl", "sensitiveDays"], buildValue("memory.ttl.sensitiveDays"));
+      setVal(config, ["projectShared", "enabled"], buildValue("projectShared.enabled"));
+      setVal(config, ["projectShared", "markerFileName"], buildValue("projectShared.markerFileName"));
+      setVal(config, ["dreaming", "enabled"], buildValue("dreaming.enabled"));
+      setVal(config, ["dreaming", "relatedThreshold"], buildValue("dreaming.relatedThreshold"));
+      setVal(config, ["dreaming", "crossProject"], buildValue("dreaming.crossProject"));
+      setVal(config, ["dreaming", "trashRetentionDays"], buildValue("dreaming.trashRetentionDays"));
+      setVal(config, ["chatMessage", "enabled"], buildValue("chatMessage.enabled"));
+      setVal(config, ["chatMessage", "injectOn"], buildValue("chatMessage.injectOn"));
+      setVal(config, ["chatMessage", "recall"], buildValue("chatMessage.recall"));
+      setVal(config, ["chatMessage", "recallScope"], buildValue("chatMessage.recallScope"));
+      setVal(config, ["chatMessage", "maxMemories"], buildValue("chatMessage.maxMemories"));
+      setVal(config, ["chatMessage", "excludeCurrentSession"], buildValue("chatMessage.excludeCurrentSession"));
+      setVal(config, ["chatMessage", "filterInjectedPrompts"], buildValue("chatMessage.filterInjectedPrompts"));
+      setVal(config, ["chatMessage", "contextWindowSize"], buildValue("chatMessage.contextWindowSize"));
+      setVal(config, ["userProfileAnalysisInterval"], buildValue("userProfileAnalysisInterval"));
+      setVal(config, ["eventLog", "enabled"], buildValue("eventLog.enabled"));
+      setVal(config, ["eventLog", "summaryHours"], buildValue("eventLog.summaryHours"));
+
+      try {
+        const result = await request("/config", {
+          method: "POST",
+          body: JSON.stringify(config),
+        });
+        toast("Config saved.", "success");
+        settingsLoaded = false;
+      } catch (e) {
+        toast("Error saving config: " + e.message, "error");
+      }
+    }
+
+    document.getElementById("loadConfigBtn").addEventListener("click", loadSettings);
+    document.getElementById("saveConfigBtn").addEventListener("click", saveSettings);
 
     (async () => {
       await loadStats();

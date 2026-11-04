@@ -82,7 +82,7 @@ Example memory:
 | Shared project memory | ✅ Implemented | Triggers on `.opencode-mem-project` marker; stored as `shared-project` scope |
 | Auto-extraction (AI/text) | ✅ Implemented | Extracts summary, topics, code snippets, decisions from captured sessions (stub or remote) |
 | Skills registry | ✅ Implemented | `src/skills.js` and `skill-*` tool modes; REST endpoints `/api/skills` |
-| Web UI | 🔲 Planned | HTTP API only |
+| Web UI | ✅ Implemented | Static HTML/JS UI with memory/knowledge/events browsers and a Settings page for config load/save. |
 
 ---
 
@@ -486,6 +486,8 @@ The server starts automatically on `127.0.0.1:4747` unless `webServerHost` is em
 | `DELETE` | `/api/skills/:id` | Delete a single skill. |
 | `GET` | `/api/skills/search` | Search skills by query and scope. |
 | `GET` | `/api/events/summary` | Summarize recent events (hours query param). |
+| `GET` | `/api/config` | Return current configuration with sensitive values masked (e.g., API keys, passwords). |
+| `POST` | `/api/config` | Update and save configuration to the plugin config file. Returns a masked version of the saved config. |
 
 ```sh
 curl http://127.0.0.1:4747/api/stats
