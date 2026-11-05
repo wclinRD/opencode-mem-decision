@@ -2,7 +2,7 @@ import { redactCredentials } from "./security.js";
 import { searchMemories } from "./storage/local.js";
 import { stripInjectedBlock } from "./inject.js";
 import { logEvent, summarizeRecentEvents } from "./eventLog.js";
-import { classifyMemory as defaultClassifyMemory } from "./classify.js";
+import { classifyMemory as defaultClassifyMemory, looksSensitive } from "./classify.js";
 import { loadConfig } from "./config.js";
 import { resolveProjectShared } from "./projectShared.js";
 import path from "path";
@@ -93,11 +93,51 @@ const lowValuePatterns = [
   /\b(branch|commit|push|git status)\b/gi,
 ];
 
+const TECHNICAL_KEYWORDS = new Set([
+  "typescript", "javascript", "python", "go", "rust", "react", "node", "docker",
+  "kubernetes", "aws", "database", "config", "api", "server", "frontend", "backend",
+  "authentication", "authorization", "cache", "deployment", "pipeline", "test",
+  "unit test", "integration", "debug", "log", "performance", "security", "refactor",
+  "architecture", "migration", "schema", "query", "index", "build", "deploy",
+]);
+
+function sentenceScore(sentence) {
+  const words = sentence.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  let score = words.length / 2; // basic length contribution
+  let keywordHits = 0;
+  for (const word of words) {
+    if (TECHNICAL_KEYWORDS.has(word)) keywordHits++;
+  }
+  if (keywordHits > 0) score += keywordHits * 3;
+  // Position bonus
+  score += 1;
+  // Code block mentions
+  if (/\b(code|export|import|function|class|const|let|var|async|await)\b/i.test(sentence)) score += 1.5;
+  return score;
+}
+
+function splitSentences(text) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 20);
+}
+
+export function summarizeLongText(text, maxSentences = 5) {
+  const sentences = splitSentences(text);
+  if (sentences.length <= maxSentences) return text;
+  const scored = sentences.map((s, i) => ({ index: i, text: s, score: sentenceScore(s) }));
+  scored.sort((a, b) => b.score - a.score);
+  const selected = scored.slice(0, maxSentences).sort((a, b) => a.index - b.index);
+  return selected.map((s) => s.text).join(" ");
+}
+
 function shouldExcludeLine(line) {
   const norm = line.trim().toLowerCase();
   if (norm.length < 6) return true;
-  if (/^(tool_use|tool_result|json|base64|stack|error|exception|auto-capture)\s*[:=]/i.test(norm)) return true;
+  if (/^(\[?tool_use\]?|\[?tool_result\]?|\[?json\]?|\[?base64\]?|\[?stack\]?|\[?error\]?|\[?exception\]?|\[?auto-capture\]?)\s*[:=\s]/i.test(norm)) return true;
   if (/^\[auto-capture\]\s/i.test(norm)) return true;
+  if (/-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/i.test(line) || /-----END (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/i.test(line)) return true;
   if (lowValuePatterns.some((p) => (p.global ? p.test(line) : p.test(line)))) return true;
   if (/^\s*(```json|```typescript|```javascript|```bash|```python|```zsh|```sh)\s*$/i.test(norm)) return true;
   if (/^\s*(```)[\s\S]{0,30}\n/.test(line)) return true;
@@ -112,6 +152,12 @@ export function filterSessionText(raw) {
     .filter((l) => l.trim().length > 0 && !shouldExcludeLine(l));
   const joined = parts.join("\n").trim();
   return joined;
+}
+
+export function checkSensitive(text) {
+  const sensitive = looksSensitive(text);
+  if (sensitive) return "sensitive";
+  return "normal";
 }
 
 const MIN_QUALITY_LENGTH = 60;
@@ -131,11 +177,19 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   }
 
   const classified = classifyMemory ? classifyMemory() : defaultClassifyMemory(filtered);
+  const sensitivity = checkSensitive(filtered);
+
+  // Summarize before classification if text is long
+  const useSummary = filtered.length > 5000;
+  const textToClassify = useSummary ? summarizeLongText(filtered) : filtered;
+  const classifiedForText = classifyMemory ? classifyMemory(textToClassify) : defaultClassifyMemory(textToClassify);
+  const storageText = useSummary ? summarizeLongText(filtered, 8) : filtered;
+
   await logEvent({
     sessionID: sessionData?.id,
     actor: "system",
     event_type: "auto-capture",
-    description: `Filtered session of length ${filtered.length}, type ${classified.type}, confidence ${classified.confidence}`,
+    description: `Filtered session length ${filtered.length}, classified type ${classified.type}, sensitive ${sensitivity}, summary=${useSummary}`,
     related_memory_ids: [],
   });
 
@@ -143,16 +197,49 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   const sessionDir = deriveSessionDirFromMessages(sessionData?.messages || []);
   const projectShared = await resolveProjectShared({ memoryConfig, cwd: sessionDir || process.cwd() });
   const projectTag = projectShared ? [projectShared.projectName] : [];
+
+  // Skip storing raw sensitive/high-risk content; store summary only if appropriate
+  if (sensitivity === "sensitive" && filtered.length > 1500 && useSummary) {
+    const summaryText = storageText;
+    if (summaryText.length < MIN_QUALITY_LENGTH) {
+      await logEvent({
+        sessionID: sessionData?.id,
+        actor: "system",
+        event_type: "auto-capture",
+        description: `Sensitive content skipped: summary below quality threshold`,
+        related_memory_ids: [],
+      });
+      return { action: "skip", reason: "sensitive content below threshold" };
+    }
+    const memory = await storage.addMemory(
+      redactCredentials(summaryText),
+      projectShared ? "project:" + projectShared.projectName : "project",
+      sessionData?.id,
+      {
+        type: "summary",
+        confidence: 0.85,
+        sensitive: "sensitive",
+        priority: 1,
+        tags: ["auto-summary", "sensitive-detected", ...(projectTag || [])],
+      },
+      duplicateConfig
+    );
+    if (!memory) {
+      return { action: "skip", reason: "summary below similarity threshold" };
+    }
+    return { action: "add", id: memory.id, summary: true };
+  }
+
   const memory = await storage.addMemory(
-    redactCredentials(filtered),
+    useSummary ? redactCredentials(storageText) : redactCredentials(filtered),
     projectShared ? "project:" + projectShared.projectName : "project",
     sessionData?.id,
     {
-      type: classified.type,
-      confidence: classified.confidence,
-      sensitive: classified.sensitive,
-      priority: classified.priority,
-      tags: [...(classified.tags || []), ...projectTag],
+      type: classifiedForText.type,
+      confidence: classifiedForText.confidence,
+      sensitive: sensitivity,
+      priority: classifiedForText.priority,
+      tags: [...(classifiedForText.tags || []), ...(projectTag || [])],
     },
     duplicateConfig
   );
