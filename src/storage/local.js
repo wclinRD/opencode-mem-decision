@@ -6,7 +6,7 @@ import { redactCredentials } from "../security.js";
 import { deriveKey, encryptData, decryptData } from "./encryption.js";
 import { ensureSchema } from "./migrations.js";
 import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
-import { calculateSimilarity } from "../capture.js";
+import { calculateSimilarity, summarizeLongText } from "../capture.js";
 import { randomBytes } from "node:crypto";
 import { buildHierarchicalGraph } from "../organize.js";
 import { saveGraph, loadGraph } from "./graph.js";
@@ -265,6 +265,89 @@ export async function optimizeMemories(scope = "default", threshold = 0.65) {
     similarityDeletedCount: similarityDeletedIds.length,
     deletedCount: deletedIds.length + similarityDeletedIds.length,
     keptCount: finalKept.length,
+  };
+}
+
+export async function digestMemories(scope = "default", threshold = 0.65) {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+
+  const memories = (db.memories || []).filter((m) => !m.isExpired && (m.confidence || 0) >= 0.3);
+  const grouped = organizeMemoriesWithLLM(null, memories);
+  const mergedMemories = [];
+  const removedIds = [];
+  let mergedGroupCount = 0;
+
+  for (const group of grouped.groups) {
+    const groupMemories = memories.filter((m) => group.memoryIds.includes(m.id));
+    if (groupMemories.length === 1) {
+      mergedMemories.push(groupMemories[0]);
+      continue;
+    }
+
+    let bestConfidence = 0;
+    let bestType = "fact";
+    let bestSensitivity = "normal";
+    let bestPriority = 0;
+    const allTags = new Set();
+    const contentParts = new Set();
+    let mostRecent = null;
+    let earliest = null;
+
+    for (const m of groupMemories) {
+      const conf = Number(m.confidence || 0);
+      if (conf > bestConfidence) {
+        bestConfidence = conf;
+        bestType = m.type || "fact";
+        bestSensitivity = m.sensitivity || "normal";
+        bestPriority = m.priority || 0;
+      }
+      if (m.tags) {
+        for (const t of m.tags) allTags.add(t);
+      }
+      contentParts.add(m.content);
+      if (!mostRecent || new Date(m.updatedAt) > new Date(mostRecent.updatedAt)) mostRecent = m;
+      if (!earliest || new Date(m.createdAt) < new Date(earliest.createdAt)) earliest = m;
+    }
+
+    const uniqueContent = Array.from(contentParts).sort((a, b) => (a.length || 0) - (b.length || 0));
+    const mergedContent = summarizeLongText(`${uniqueContent.join("\n\n")}`);
+    const merged = {
+      id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      content: mergedContent,
+      type: bestType,
+      confidence: bestConfidence,
+      sensitivity: bestSensitivity,
+      priority: bestPriority,
+      tags: Array.from(allTags),
+      scope: mostRecent ? mostRecent.scope || "default" : "default",
+      projectName: mostRecent ? mostRecent.projectName || null : null,
+      createdAt: earliest ? earliest.createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mergedMemories.push(merged);
+    removedIds.push(...groupMemories.map((m) => m.id));
+    mergedGroupCount++;
+  }
+
+  // add non-merged single memories
+  const removedSet = new Set(removedIds);
+  for (const m of memories) {
+    if (!removedSet.has(m.id)) {
+      mergedMemories.push(m);
+    }
+  }
+
+  db.memories = mergedMemories.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  await writeJsonFile(filePath, db);
+
+  return {
+    originalCount: memories.length,
+    mergedGroupCount,
+    removedCount: removedIds.length,
+    keptCount: mergedMemories.length,
+    mergedMemories,
   };
 }
 
@@ -931,6 +1014,7 @@ export const localStorage = {
   cleanupTrash,
   getTtlDaysForMemory,
   optimizeMemories,
+  digestMemories,
   organizeMemoriesWithLLM,
   buildGraphAndPersist,
   listGraphMetrics,

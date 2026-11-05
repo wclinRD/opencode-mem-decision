@@ -399,7 +399,14 @@
         </select>
         <button id="searchButton" class="secondary">Search</button>
         <button id="optimizeMemoryButton" class="secondary">Optimize Memory</button>
+        <button id="digestMemoryButton" class="secondary">Digest Memories</button>
         <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
+      </div>
+
+      <div id="digestResults" style="display:none; margin-bottom:16px;">
+        <h3 class="section-title">Digest Results</h3>
+        <div id="digestSummary" class="meta"></div>
+        <div id="digestGroupList" class="grid"></div>
       </div>
 
       <div id="memoryList" class="grid"></div>
@@ -1127,6 +1134,44 @@
         await loadStats();
       } catch (e) {
         toast("Error: " + e.message, "error");
+      }
+    });
+    document.getElementById("digestMemoryButton").addEventListener("click", async () => {
+      const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
+      if (!confirm("Digest memories in scope \"" + scope + "\"? This will group similar memories and merge them into consolidated summaries.")) return;
+      try {
+        const result = await request("/memory/digest", {
+          method: "POST",
+          body: JSON.stringify({ scope }),
+        });
+        document.getElementById("digestResults").style.display = "block";
+        document.getElementById("digestSummary").textContent = `Digest completed: ${result.mergedGroupCount} groups merged, ${result.removedCount} duplicate memories removed, ${result.keptCount} consolidated memories kept.`;
+        const list = document.getElementById("digestGroupList");
+        list.innerHTML = "";
+        if (result.mergedGroupCount === 0) {
+          list.innerHTML = `<div class="empty">No similar memories found to merge.</div>`;
+        } else {
+          for (const m of result.mergedMemories) {
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `
+              <h3>${escapeHtml(m.id)}</h3>
+              <div class="card-content">${escapeHtml(m.content)}</div>
+              <div class="meta">
+                <span class="pill">${escapeHtml(m.type || "fact")}</span>
+                <span class="pill">${(m.confidence || 0).toFixed(2)}</span>
+              </div>
+            `;
+            list.appendChild(card);
+          }
+        }
+        settingsLoaded = false;
+        await loadMemories();
+        await loadStats();
+      } catch (e) {
+        toast("Error: " + e.message, "error");
+        document.getElementById("digestResults").style.display = "block";
+        document.getElementById("digestSummary").textContent = `Error: ${escapeHtml(e.message)}`;
       }
     });
 
