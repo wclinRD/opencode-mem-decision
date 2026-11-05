@@ -63,30 +63,30 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - Fixed prompt hook tests by ensuring memory scope matches default recall scope and injection filters don't overfilter.
 - All 107 tests currently pass.
 
-## Phase 8: Knowledge Base Search and Swift SDK Ingestion
-- Added `searchKnowledge(query)` with token scoring and `importKnowledgeFromDirectory(dir)` to import markdown/SwiftUI files into the knowledge base.
-- Exposed `knowledge-search` and `knowledge-import` modes in the memory tool for CLI and tool use.
-- Added POST `/api/knowledge/search` route in the web server for knowledge search.
-- Added unit tests for `searchKnowledge` and `importKnowledgeFromDirectory`; all 109 tests pass.
-- Ingested Swift UIKit basics and modifier patterns from `doc/swift/*.md` into the knowledge base for future Swift UI/app development.
+## Phase 9: LLM-Driven Memory Organization and UI Groups
+- Changed the web UI's "Optimize Memory" button to "Organize by Topic", which calls the backend to group memories by topic using an LLM or local clustering, and returns structured `groups` with `category` and `memoryIds`.
+- Added `organizeMemoriesWithLLM(config, memories)` to `src/storage/local.js` that calls an LLM via configured `extractionApiUrl`/`extractionModel`/`extractionApiKey` to generate meaningful topic categories, with a local fallback based on technical keywords.
+- Updated `/api/memory/optimize` POST endpoint to return the organized groups instead of deleting duplicates; added `showGroupMemories` in the UI to display grouped memory cards by category.
+- All 109 tests continue to pass.
 
 ## Key Files Changed
 - `src/classify.js`: dynamic tagging and weighted confidence functions.
 - `src/organize.js`: BM25 text similarity and graph construction.
-- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, and exported tokenize function.
+- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, and LLM-based memory organization (`organizeMemoriesWithLLM`, `organizeLocal`) with local keyword clustering fallback.
 - `src/retrieval.js`: dual-route retrieval simulation and BM25 scoring.
 - `src/capture.js`: session filtering, summarization, sensitive detection, and noise heuristic `isGenericOrNoiseText`.
 - `src/inject.js`: context-aware splitting, fallback retrieval, injection formatting, and candidate filtering with default confidence/type fallbacks.
 - `src/plugin.js`: tool schema and injection integration with memory modes; added knowledge-search and knowledge-import modes.
 - `src/tools/memoryTools.js`: knowledge tool schema extended with search and import modes.
-- `src/server.js`: memory and stats endpoints use noise-excluded memory listing; added POST `/api/knowledge/search`.
+- `src/server.js`: memory endpoints updated; `/api/memory/optimize` now returns organized topic groups using LLM/local method; added POST `/api/knowledge/search`.
+- `src/static/ui.html`: changed optimization button label to "Organize by Topic", added organized groups container and `showGroupMemories` to display grouped cards by category.
 - `src/config.js`: new `fallbackRetrieval` default option; updated `recallScope` default to `"default"`.
 - `tests/storage.test.js`: added unit tests for `searchKnowledge` and `importKnowledgeFromDirectory`.
 - `tests/inject.test.js`, `tests/plugin.test.js`: updated injection and prompt hook tests for default scope behavior.
 - `doc/swift/*.md`: sample Swift UI basics and modifiers documentation ingested into the knowledge base.
 
 ## Verification & Policy
-- All 107 tests pass in current state.
+- All 109 tests pass in current state.
 - Each phase committed separately with clear descriptions.
 - No context capacity threshold verification was implemented due to no actual measure tool for opencode context percentage in current harness. Progress paused after core Phase 2-3 work and then implemented subsequent phases.
 

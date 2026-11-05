@@ -398,10 +398,13 @@
           <option value="asc">Oldest first</option>
         </select>
         <button id="searchButton" class="secondary">Search</button>
-        <button id="optimizeMemoryButton" class="secondary">Optimize Memory</button>
+        <button id="optimizeMemoryButton" class="secondary">Organize by Topic</button>
         <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
       </div>
-
+      <div id="organizeGroupsContainer" style="display:none;">
+        <h3 class="section-title">Organized Groups</h3>
+        <div id="organizeGroupsList" class="grid"></div>
+      </div>
       <div id="memoryList" class="grid"></div>
     </div>
 
@@ -1115,20 +1118,81 @@
     document.getElementById("retrieveButton").addEventListener("click", runDualRouteRetrieve);
     document.getElementById("optimizeMemoryButton").addEventListener("click", async () => {
       const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
-      if (!confirm("Optimize memories in scope \"" + scope + "\"? This will merge duplicate content and delete redundant entries.")) return;
+      const container = document.getElementById("organizeGroupsContainer");
+      const list = document.getElementById("organizeGroupsList");
+      container.style.display = "block";
+      list.innerHTML = "";
       try {
         const result = await request("/memory/optimize", {
           method: "POST",
           body: JSON.stringify({ scope }),
         });
-        toast(`Optimized: ${result.deletedCount} deleted, ${result.keptCount} kept.`, "success");
-        settingsLoaded = false;
-        await loadMemories();
-        await loadStats();
+        if (!result || !result.groups || !result.groups.length) {
+          list.innerHTML = `<div class="empty">No groups found.</div>`;
+          return;
+        }
+        result.groups.forEach((g) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <h3>${escapeHtml(g.category)}</h3>
+            <div class="meta">${g.memoryIds.length} memory(ies)</div>
+            <div class="actions">
+              <button class="secondary" data-category="${escapeHtml(g.category)}">Show Memories</button>
+            </div>
+          `;
+          card.querySelector("button").addEventListener("click", () => showGroupMemories(g.category, g.memoryIds));
+          list.appendChild(card);
+        });
       } catch (e) {
+        list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
         toast("Error: " + e.message, "error");
       }
     });
+
+    async function showGroupMemories(category, memoryIds) {
+      const list = document.getElementById("memoryList");
+      list.innerHTML = "";
+      try {
+        const all = await request("/memory");
+        const filtered = all.filter((m) => memoryIds.includes(m.id));
+        filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        if (!filtered.length) {
+          list.innerHTML = `<div class="empty">No memories in this group.</div>`;
+          return;
+        }
+        filtered.forEach((m) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          const conf = Number(m.confidence || 0.5);
+          const confClass = conf >= 0.8 ? "conf-high" : conf >= 0.5 ? "conf-medium" : "conf-low";
+          const sensClass = (m.sensitivity || "normal").toLowerCase();
+          const priorityClass = m.priority === 2 ? "conf-high" : m.priority === 1 ? "conf-medium" : "conf-low";
+          const priorityLabel = m.priority === 2 ? "high" : m.priority === 1 ? "medium" : "low";
+          card.innerHTML = `
+            <h3>${escapeHtml(m.id)}</h3>
+            <div class="card-content">${escapeHtml(m.content)}</div>
+            <div class="meta">
+              <span class="pill">${escapeHtml(m.scope || "default")}</span>
+              ${m.projectName ? `<span class="pill project-pill">${escapeHtml(m.projectName)}</span>` : ""}
+              <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
+              <span class="pill ${confClass}" data-conf="${escapeHtml(m.confidence || 0.5)}">${conf.toFixed(2)}</span>
+              <span class="pill sensitivity-${sensClass}">${escapeHtml(m.sensitivity || "normal")}</span>
+              <span class="pill ${priorityClass}">${priorityLabel}</span>
+            </div>
+            <div class="time-row">created: ${formatLocalTime(m.createdAt)} · updated: ${formatLocalTime(m.updatedAt)}</div>
+            <div class="actions">
+              <button class="danger" data-id="${escapeHtml(m.id)}">Delete</button>
+            </div>
+          `;
+          card.querySelector("button").addEventListener("click", () => deleteMemory(m.id));
+          list.appendChild(card);
+        });
+      } catch (e) {
+        list.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
+        toast("Error: " + e.message, "error");
+      }
+    }
 
     (async () => {
       await loadStats();

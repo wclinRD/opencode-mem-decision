@@ -242,6 +242,71 @@ export async function optimizeMemories(scope = "default") {
   return { deletedCount: deletedIds.length, keptCount: kept.length };
 }
 
+export async function organizeMemoriesWithLLM(config, memories) {
+  const grouped = { groups: [], stats: { total: memories.length, grouped: 0, ungrouped: 0 } };
+  if (!memories.length) return grouped;
+
+  const apiBaseUrl = config?.extractionApiUrl || config?.embeddingApiUrl || null;
+  const model = config?.extractionModel || config?.embeddingModel || "gpt-4o-mini";
+  const apiKey = config?.extractionApiKey || config?.embeddingApiKey || null;
+
+  if (apiBaseUrl) {
+    const url = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/v1/chat/completions`;
+    const prompt = `You are organizing memory items by topic/similarity. Return a JSON object with a "groups" array. Each group has a "category" (a short descriptive label) and "memoryIds" array of memory IDs. Group all memory IDs into meaningful categories. Do not include extra text. Input memories: ${JSON.stringify(memories.map((m) => ({ id: m.id, content: m.content, tags: m.tags || [], scope: m.scope || "default" })))}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: "Return a JSON object with key groups." },
+          { role: "user", content: prompt },
+        ],
+        response_format: { type: "json_object" },
+      }),
+    });
+    if (!response.ok) throw new Error(`LLM error: ${response.status}`);
+    const data = await response.json();
+    const content = data.choices && data.choices[0] ? data.choices[0].message?.content : data;
+    try {
+      const parsed = JSON.parse(content);
+      const groups = parsed.groups || [];
+      const seen = new Set();
+      grouped.groups = groups.map((g) => ({ category: g.category || "Uncategorized", memoryIds: (g.memoryIds || []).filter((id) => !seen.has(id) && !seen.add(id)) }));
+      grouped.stats.grouped = grouped.groups.reduce((sum, g) => sum + g.memoryIds.length, 0);
+      grouped.stats.ungrouped = memories.length - grouped.stats.grouped;
+    } catch {
+      grouped.groups = [{ category: "Uncategorized", memoryIds: memories.map((m) => m.id) }];
+      grouped.stats.ungrouped = memories.length;
+    }
+    return grouped;
+  }
+
+  return organizeLocal(memories);
+}
+
+function organizeLocal(memories) {
+  const grouped = { groups: [], stats: { total: memories.length, grouped: 0, ungrouped: 0 } };
+  const topics = new Map();
+  const keywords = ["swift", "swiftui", "react", "typescript", "javascript", "python", "go", "rust", "database", "api", "system", "architecture", "design", "frontend", "backend", "mobile", "web", "machine learning", "deployment", "testing"];
+  for (const m of memories) {
+    const text = (m.content || "").toLowerCase();
+    let category = "General";
+    for (const kw of keywords) {
+      if (text.includes(kw)) { category = kw; break; }
+    }
+    if (!topics.has(category)) topics.set(category, []);
+    topics.get(category).push(m.id);
+  }
+  grouped.groups = Array.from(topics.entries()).map(([category, memoryIds]) => ({ category, memoryIds }));
+  grouped.stats.grouped = grouped.groups.reduce((sum, g) => sum + g.memoryIds.length, 0);
+  grouped.stats.ungrouped = 0;
+  return grouped;
+}
+
 export async function cleanupExpiredMemories(config) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -840,6 +905,7 @@ export const localStorage = {
   cleanupTrash,
   getTtlDaysForMemory,
   optimizeMemories,
+  organizeMemoriesWithLLM,
   buildGraphAndPersist,
   listGraphMetrics,
   addSummaryNode,

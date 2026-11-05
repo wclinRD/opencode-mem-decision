@@ -180,7 +180,9 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
       } else if (path === "/api/memory/optimize" && method === "POST") {
         const body = await parseBody(req);
         const scope = body.scope || "default";
-        const result = await storage.optimizeMemories(scope);
+        const config = loadConfig();
+        const memories = await storage.searchMemories("", { scope, includeExpired: false });
+        const result = await storage.organizeMemoriesWithLLM(config, memories);
         sendJson(res, 200, result);
       } else if (path === "/api/memory/organize" && method === "POST") {
         const body = await parseBody(req);
