@@ -157,6 +157,29 @@ cd ~/.config/opencode/plugins/opencode-mem-decision
 npm install
 ```
 
+Copy the **whole repository**, so the `src/` directory keeps its name:
+
+```
+~/.config/opencode/plugins/opencode-mem-decision/
+├── index.js               # export { default } from "./src/plugin.js";
+├── package.json           # "main": "index.js", "type": "module"
+├── package-lock.json
+├── node_modules/          # npm install
+└── src/
+    ├── plugin.js          # Plugin.define(...)
+    └── storage/ ...
+```
+
+> **Do not flatten `src/`.** Copying the contents of `src/` into the plugin root
+> (`cp -R /path/to/opencode_mem/src/* ~/.config/opencode/plugins/opencode-mem-decision/`)
+> makes `index.js` fail with
+> `ERR_MODULE_NOT_FOUND: Cannot find module '.../src/plugin.js'`.
+> OpenCode reports the less specific
+> `Plugin must export a default definition with an id and an effect or setup function`
+> because the failed import leaves `default` undefined.
+
+When the destination already exists, `cp -R` nests the repository inside it. Remove the old copy first (`rm -rf ~/.config/opencode/plugins/opencode-mem-decision`) or use the `rsync` sync commands below.
+
 The directory must contain `package.json` with `"main": "index.js"` and `index.js` must default-export the plugin definition.
 
 Reload and verify:
@@ -170,7 +193,18 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 
 A successful load shows `loading plugin` and **no** `failed to load plugin`.
 
-> Changes made in the source repository do not reach OpenCode automatically. Re-copy `index.js`, `package.json`, and `src/` to the global directory, or use a symlink:
+> Changes made in the source repository do not reach OpenCode automatically. Re-copy `index.js`, `package.json`, `package-lock.json`, and the `src/` directory to the global directory, keeping the `src/` layer:
+>
+> ```sh
+> SRC=/path/to/opencode_mem
+> DST=~/.config/opencode/plugins/opencode-mem-decision
+> rsync -a "$SRC"/index.js "$SRC"/package.json "$SRC"/package-lock.json "$DST"/
+> rsync -a "$SRC"/src/ "$DST"/src/
+> ```
+>
+> The trailing slash on `"$SRC"/src/` copies the directory's contents, not the directory itself. Do not add `--delete`: it removes runtime files such as `config.json` that are not in the repository.
+>
+> Alternatively, use a symlink:
 >
 > ```sh
 > ln -s /path/to/opencode_mem ~/.config/opencode/plugins/opencode-mem-decision
@@ -607,7 +641,14 @@ If you see:
 Plugin must export a default definition with an id and an effect or setup function
 ```
 
-the plugin is using the V1 API. OpenCode 2.x requires:
+first check that the entry point resolves. From the plugin directory:
+
+```sh
+cd ~/.config/opencode/plugins/opencode-mem-decision
+node -e "import('./index.js').then(m => console.log(m.default.id)).catch(e => console.error(e.code, e.message))"
+```
+
+`ERR_MODULE_NOT_FOUND ... src/plugin.js` means the install was flattened: create `src/` and copy the repository's `src/` contents into it (see [Install](#install)). Only after that, treat the message as a V1 API problem. OpenCode 2.x requires:
 
 ```js
 import { Plugin } from "@opencode/plugin";
@@ -622,7 +663,8 @@ Also confirm:
 
 - dependency is `@opencode/plugin` (2.x), not `@opencode-ai/plugin`;
 - `package.json` has `"type": "module"` and `"main": "index.js"`;
-- the loaded directory is the one you edited (global copy vs repository).
+- the loaded directory is the one you edited (global copy vs repository);
+- the entry point resolves from the plugin directory (where `node_modules` exists): `node -e "import('./index.js')"` shows no `ERR_MODULE_NOT_FOUND`.
 
 ### Tool `memory` is missing
 
@@ -630,10 +672,11 @@ Also confirm:
 2. `opencode service status`
 3. Check the log for `failed to load plugin`.
 4. Confirm the plugin directory contains `node_modules/@opencode/plugin`.
+5. Confirm the layout: `index.js` at the root and `src/plugin.js` inside `src/`. A flattened install never loads, even with a correct `node_modules`.
 
 ### Changes do not take effect
 
-You edited the repository, but OpenCode loads `~/.config/opencode/plugins/opencode-mem-decision/`. Re-copy the files or use a symlink.
+You edited the repository, but OpenCode loads `~/.config/opencode/plugins/opencode-mem-decision/`. Re-copy the files (keeping `src/`) or use a symlink. After syncing, restart the service: `opencode service restart`.
 
 ### Web server does not start
 
@@ -698,13 +741,21 @@ node --test tests/plugin.test.js
 After changing the plugin, sync to the global directory and restart:
 
 ```sh
-rsync -a --delete \
-  --exclude node_modules \
-  ./index.js ./package.json ./package-lock.json ./src/ \
-  ~/.config/opencode/plugins/opencode-mem-decision/
-
-cd ~/.config/opencode/plugins/opencode-mem-decision && npm install
+SRC=$(pwd)
+DST=~/.config/opencode/plugins/opencode-mem-decision
+rsync -a "$SRC"/index.js "$SRC"/package.json "$SRC"/package-lock.json "$DST"/
+rsync -a "$SRC"/src/ "$DST"/src/
+(cd "$DST" && npm install)
 opencode service restart
+```
+
+Keep the `src/` layer: `index.js` imports `./src/plugin.js`. No `--delete`; it would also remove runtime files in the global directory.
+
+Check the install before restarting:
+
+```sh
+diff -rq "$SRC"/src "$DST"/src     # no output = identical
+node -e "import('$DST/index.js').then(m => console.log(m.default.id))"
 ```
 
 ---
