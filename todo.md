@@ -150,10 +150,182 @@
 - [ ] 使用 LLM summarization 生成 Summary / Principle 節點。
 - [ ] AdaptiveGraph（personalized PageRank diffusion）與多跳查詢優化。
 
+## 後端功能評估與改進建議
+
+### LLM 使用策略
+**`ctx.model()`**：OpenCode V2 plugin API 提供的模型呼叫介面，直接使用當前 session 的 LLM。
+- ✅ 不需要額外 API key
+- ✅ 支援所有 OpenCode 後端（OpenAI、Anthropic、Ollama、本地模型）
+- ⚠️ 只在 prompt hook 或 tool execution 時可用（有 session context）
+- ❌ 無法在 background timer 中直接使用
+
+**適用場景：**
+- AI Extraction（Step 13）— prompt hook 時觸發
+- LLM Reranking（Step 19）— inject hook 時觸發
+- AI-Based Dreaming（Step 18）— 改設計為 tool trigger
+- Graph Summary Generation — tool trigger
+
+**不適用場景：**
+- Embedding generation（需要 embedding API，非 chat completion）
+- Background consolidation（沒有 session context）
+
+### 現有強項
+- 記憶工具完整：add/list/search/profile/forget/export/import/dream/organize/retrieve/utility
+- 自動捕捉：session 完成/idle 時自動儲存
+- 去重：向量相似度 + Jaccard
+- 分類與標籤：type/confidence/tags
+- 雙路徑檢索：tag filter + graph traversal
+- Graph 組織：base/summary/category 節點
+- 動態注入預算：根據 context fill ratio 調整
+- 專案範圍隔離：project scope + shared project marker
+- 安全：credential redaction + encryption at rest
+- Web API + UI
+
+### 弱點與改善建議
+
+#### Step 13：AI Extraction（拆分 Auto-Capture）
+**問題：** Auto-capture 存整段 session 為一個大記憶，LLM 難以利用。
+**改善：**
+- [x] 使用 `ctx.session.generate()` 呼叫當前 session LLM（不需額外 API key）
+- [x] 將 session 拆成獨立記憶（每個 decision/fact/lesson 一條）
+- [x] 提升記憶品質與粒度
+- [x] 測試：10 new tests in `tests/extraction.test.js`，134/134 通過
+
+#### Step 14：Embedding 策略
+**問題：** 本地 stub 是 token-hash，不是語意向量，相似度計算不準。
+**改善：**
+- [ ] `ctx.model()` 不支援 embedding（只有 chat completion）
+- [ ] 預設使用 OpenAI-compatible API（`embeddingApiUrl`）
+- [ ] 支援 Ollama 本地模型 embedding
+- [ ] 支援 @xenova/transformers 本地模型
+- [ ] 測試：驗證 embedding 相似度準確率提升
+
+#### Step 15：Graph 增量更新
+**問題：** Graph 重建 O(n²)，記憶多時很慢。
+**改善：**
+- [ ] 增量更新 graph，只為新增/修改的記憶計算邊
+- [ ] Persist graph index，避免每次都重算
+- [ ] 效能基準：比較全量重建 vs 增量更新
+- [ ] 測試：驗證增量更新正確性
+
+#### Step 16：Memory Access Tracking
+**問題：** 不知道哪些記憶實際被用到、哪些是垃圾。
+**改善：**
+- [ ] 記錄 memory access log（每次 recall/inject）
+- [ ] 計算真實 utility score（基於實際使用）
+- [ ] 低效用記憶自動降級或移除
+- [ ] 新增 `/api/memory/access-stats` endpoint
+- [ ] 測試：驗證 access tracking 正確性
+
+#### Step 17：Hybrid Retrieval（Embedding + BM25）
+**問題：** 目前檢索是 keyword/BM25，沒有語意搜索。查詢「怎麼 deploy」找不到「deployment uses Fly.io」。
+**改善：**
+- [ ] 混合檢索 = embedding cosine similarity + BM25 score
+- [ ] 實現 HNSW 向量索引，支援快速 ANN search
+- [ ] 可調配的 weighting（semantic vs keyword）
+- [ ] 測試：驗證 recall@k 提升
+
+#### Step 18：AI-Based Dreaming
+**問題：** Dreaming consolidation 是啟發式，沒有 AI 理解內容。
+**改善：**
+- [ ] 使用 `ctx.model()` 判斷哪些記憶矛盾、重複、過時
+- [ ] 改設計：透過 `memory.dream` tool trigger（非 background timer）
+- [ ] 提升 consolidation 品質
+- [ ] 測試：驗證 consolidation 準確率
+
+#### Step 19：LLM Reranking
+**問題：** 檢索結果直接注入，沒有效率排序。
+**改善：**
+- [ ] 檢索 top-k → `ctx.model()` rerank → 注入 top-n
+- [ ] 在 inject hook 時呼叫（有 session context）
+- [ ] 提升相關性（增加延遲）
+- [ ] 可選啟用（基於效能考量）
+- [ ] 測試：驗證 reranking 品質提升
+
+#### Step 20：BM25 Corpus TF/IDF
+**問題：** BM25 只用 local avgDocLen，沒有 corpus TF/IDF，rank 不準。
+**改善：**
+- [ ] 計算整個 corpus 的 document frequency
+- [ ] 建立 TF-IDF 索引
+- [ ] 更新 BM25 scoring
+- [ ] 測試：驗證 ranking 準確率提升
+
+### 建議優先順序（後端）
+1. Step 13（AI Extraction）→ 提升記憶品質（最高優先）
+2. Step 14（真實 Embedding API）→ 提升檢索準確度
+3. Step 17（Hybrid Retrieval）→ 提升 recall
+4. Step 16（Memory Access Tracking）→ 提升效用分數
+5. Step 15（Graph 增量更新）→ 提升效能
+6. Step 18（AI-Based Dreaming）→ 提升 consolidation 品質
+7. Step 20（BM25 TF/IDF）→ 提升 ranking
+8. Step 19（LLM Reranking）→ 提升相關性（高延遲，可選）
+
+## WebUI 評估與改進
+
+### 現有強項
+- Dark/light mode 支援
+- 多 tab（Memories、Knowledge、Events、Organize、Settings）
+- 豐富搜尋篩選（scope、project、type、confidence、priority、time、sort）
+- Add/delete memory
+- Settings 管理（load/save）
+- Toast notifications
+- Project awareness
+- Graph organization display
+- Dual-route search UI
+
+### 弱點與改善建議
+
+1. **無記憶編輯功能**：只能 add/delete，不能修正或更新記憶內容。
+   - 改善：新增編輯 modal，支援修改 content/scope/type/confidence/tags。
+
+2. **無記憶詳情視圖**：內容在卡片顯示，無法展開看完整內容與關聯。
+   - 改善：新增詳情 modal，顯示完整內容、關聯記憶、utility score、access history。
+
+3. **Graph 可視化是文字列表**：顯示 node ID 清單，不是真正的圖形。
+   - 改善：使用 Cytoscape.js 或 Sigma.js 可視化 graph，展示 node 關係與 community structure。
+
+4. **無記憶關係顯示**：無法看見記憶之間的關聯。
+   - 改善：在詳情 modal 顯示相關記憶（semantic links、temporal links）。
+
+5. **無 utility scoring 顯示**：無法知道哪些記憶有用、哪些是垃圾。
+   - 改善：新增 utility score 柱狀圖、access count、最後使用時間。
+
+6. **無 access tracking 顯示**：無法看到記憶被檢索的頻率。
+   - 改善：新增 access log 與統計。
+
+7. **無分頁**：所有記憶一次載入，資料多時慢。
+   - 改善：新增分頁或 infinite scroll。
+
+8. **無 export/import UI**：只有 API。
+   - 改善：新增 export/import 按鈕與檔案選擇。
+
+9. **搜尋無 debounce**：每次輸入都觸發 API 請求。
+   - 改善：加入 300ms debounce。
+
+10. **Settings 頁面太擁擠**：大量欄位無分組指引。
+    - 改善：使用 collapsible accordion 分組、加入說明文字、group by category。
+
+11. **無 recall/injection 品質監控**：無法看到記憶體注入的相關性。
+    - 改善：新增 recall quality dashboard（precision、recall、latency）。
+
+12. **無 memory health dashboard**：無法一覽記憶庫健康狀況。
+    - 改善：新增 dashboard 顯示總數、平均 confidence、重複率、過期率、效用分佈。
+
+### 建議優先順序（WebUI）
+1. Memory edit functionality → 提升使用者控制力
+2. Graph visualization（Cytoscape.js）→ 直覺理解記憶結構
+3. Recall/injection quality dashboard → 驗證系統有效性
+4. Utility/access tracking display → 識別垃圾記憶
+5. Search debouncing → 效能改善
+6. Settings layout improvement → 使用者體驗
+
 ## 優先級建議
 
 1. Step 6（HybridTagGraph）：補足靜態標籤分組的關聯與全局檢索能力，實用且可落地。
-2. Step 2（TTL/清理）：直接提升記憶庫品質，減少垃圾。
-3. Step 3（元數據保留）：確保 update 不會丟失質量標籤。
-4. Step 4（工具增強）：便於管理與查詢。
-5. Step 5（高階整合）：長期規劃，依資源安排。
+2. WebUI Graph Visualization：直覺理解記憶結構，驗證 HybridTagGraph 效果。
+3. Recall/Injection Quality Dashboard：驗證系統是否真正提升 LLM 效能。
+4. Step 2（TTL/清理）：直接提升記憶庫品質，減少垃圾。
+5. WebUI Edit Functionality：提升使用者控制力。
+6. Step 3（元數據保留）：確保 update 不會丟失質量標籤。
+7. Step 4（工具增強）：便於管理與查詢。
+8. Step 5（高階整合）：長期規劃，依資源安排。
