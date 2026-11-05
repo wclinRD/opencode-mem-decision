@@ -29,11 +29,11 @@
 - [x] Add migration path for existing flat memories
 
 ## Phase 5: Capture Flow Optimization
-- [ ] Pre-filter raw session text for noise removal
-- [ ] Summarize before classification: reduce long raw snippets
-- [ ] Apply sensitive pattern check before storage/injection
-- [ ] Update auto-capture to emit summaries instead of raw text where appropriate
-- [ ] Test capture quality and false positive rate
+- [x] Pre-filter raw session text for noise removal
+- [x] Summarize before classification: reduce long raw snippets
+- [x] Apply sensitive pattern check before storage/injection
+- [x] Update auto-capture to emit summaries instead of raw text where appropriate
+- [x] Test capture quality and false positive rate
 
 ## Phase 6: Metadata Weighting & Cutoff Handling
 - [ ] Revise confidence calculation: combine regex, length, time decay, context
@@ -52,4 +52,5 @@
 - Phase 2 committed: `bd73e05`
 - Phase 3 core routing integrated into retrieval flow.
 - Phase 4 committed: `fe50a97` layered storage schemas and dual-route integration.
-- Phase 5–6 pending implementation and testing.
+- Phase 5 committed: `79909ae` capture flow optimization with summarization and sensitive filtering.
+- Phase 6 pending implementation and testing.
