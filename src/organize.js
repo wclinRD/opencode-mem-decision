@@ -1,4 +1,8 @@
-import { tokenize, cosineSimilarity } from "./embedding.js";
+import { cosineSimilarity } from "./embedding.js";
+
+function tokenize(text) {
+  return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+}
 
 /**
  * Build hierarchical memory graph from stored memories.
