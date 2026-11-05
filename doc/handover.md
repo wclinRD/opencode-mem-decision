@@ -534,6 +534,18 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `src/static/ui.html`：於 Memories 控制列加入「Optimize Memory」按鈕，選擇 scope 後二次確認，呼叫後端 API，然後重新載入記憶列表與統計。
 - [x] 全部測試通過：94/94。
 
+## HybridTagGraph Memory Organization & Dual-Route Retrieval（2026-11-05）
+
+- [x] 建立 `src/organize.js`：`buildHierarchicalGraph(memories, config)` 構建記憶階層圖，包含 base nodes、summary nodes（依 tag/text 相似度分群）、category nodes（project/lesson/knowledge）、edges（semantic、temporal、belongs_to、categorized_by）。
+- [x] 建立 `src/storage/graph.js`：儲存與載入圖資料至 `<storage>/graph.db.json`。
+- [x] 建立 `src/retrieval.js`：`simulateDualRouteRetrieve(query, memories, graphData, filters)` 實作雙路由檢索：
+  - System-1 similarity/tags search（tag overlap + keyword text similarity）。
+  - System-2 hierarchy global selection（沿 category node 遍歷相關原始記憶）。
+- [x] `src/server.js`：新增 `POST /api/memory/organize`（構建並保存圖）與 `POST /api/memory/retrieve`（回傳雙路由結果）。
+- [x] `src/static/ui.html`：新增「Organize」分頁與對應 UI 控制項（Build Graph、Dual-Route Search）。
+- [x] 全部測試通過：94/94。
+- [x] 分支 `HybridTagGraph-Memory` 已推至遠端。
+
 ## 下一步
 
 1. 確認功能模組清單無誤。
