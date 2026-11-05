@@ -233,6 +233,152 @@ function normalizeContent(content) {
   return String(content || "").toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+export async function deduplicateMemoriesArray(memories, threshold) {
+  const exactGroups = new Map();
+  const exactDeletedIds = [];
+  const kept = [];
+
+  for (const m of memories) {
+    const key = normalizeContent(m.content);
+    if (!exactGroups.has(key)) {
+      exactGroups.set(key, m);
+      kept.push(m);
+    } else {
+      const existing = exactGroups.get(key);
+      const confA = Number(m.confidence || 0.5);
+      const confB = Number(existing.confidence || 0.5);
+      if (confA > confB || (confA === confB && new Date(m.updatedAt) > new Date(existing.updatedAt))) {
+        exactGroups.set(key, m);
+        exactDeletedIds.push(existing.id);
+        const idx = kept.findIndex((x) => x.id === existing.id);
+        if (idx !== -1) kept.splice(idx, 1);
+        kept.push(m);
+      } else {
+        exactDeletedIds.push(m.id);
+      }
+    }
+  }
+
+  const similarityDeletedIds = [];
+  const finalKept = [];
+
+  for (const m of kept) {
+    const redacted = redactCredentials(m.content || "");
+    let dup = false;
+    for (const existing of finalKept) {
+      const existingRedacted = redactCredentials(existing.content || "");
+      if (calculateSimilarity(redacted, existingRedacted) >= threshold) {
+        dup = true;
+        break;
+      }
+    }
+    if (dup) {
+      similarityDeletedIds.push(m.id);
+    } else {
+      finalKept.push(m);
+    }
+  }
+
+  return {
+    kept: finalKept,
+    deletedExactIds: exactDeletedIds,
+    deletedSimilarIds: similarityDeletedIds,
+    deletedCount: exactDeletedIds.length + similarityDeletedIds.length,
+  };
+}
+
+export async function mergeDedupAndDigestMemories(scope = "default", threshold = 0.65) {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+
+  const allMemories = (db.memories || []).filter((m) => !m.isExpired && (m.confidence || 0) >= 0.3);
+
+  const dedupResult = await deduplicateMemoriesArray(allMemories, threshold);
+  const deduped = dedupResult.kept;
+
+  const grouped = await organizeMemoriesWithLLM(null, deduped);
+  const mergedMemories = [];
+  const removedIds = [];
+  let mergedGroupCount = 0;
+
+  for (const group of grouped.groups) {
+    const groupMemories = deduped.filter((m) => group.memoryIds.includes(m.id));
+    if (groupMemories.length === 1) {
+      mergedMemories.push(groupMemories[0]);
+      continue;
+    }
+
+    let bestConfidence = 0;
+    let bestType = "fact";
+    let bestSensitivity = "normal";
+    let bestPriority = 0;
+    const allTags = new Set();
+    const contentParts = new Set();
+    let mostRecent = null;
+    let earliest = null;
+
+    for (const m of groupMemories) {
+      const conf = Number(m.confidence || 0);
+      if (conf > bestConfidence) {
+        bestConfidence = conf;
+        bestType = m.type || "fact";
+        bestSensitivity = m.sensitivity || "normal";
+        bestPriority = m.priority || 0;
+      }
+      if (m.tags) {
+        for (const t of m.tags) allTags.add(t);
+      }
+      contentParts.add(m.content);
+      if (!mostRecent || new Date(m.updatedAt) > new Date(mostRecent.updatedAt)) mostRecent = m;
+      if (!earliest || new Date(m.createdAt) < new Date(earliest.createdAt)) earliest = m;
+    }
+
+    const uniqueContent = Array.from(contentParts).sort((a, b) => (a.length || 0) - (b.length || 0));
+    const mergedContent = summarizeLongText(`${uniqueContent.join("\n\n")}`);
+    const merged = {
+      id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      content: mergedContent,
+      type: bestType,
+      confidence: bestConfidence,
+      sensitivity: bestSensitivity,
+      priority: bestPriority,
+      tags: Array.from(allTags),
+      scope: mostRecent ? mostRecent.scope || "default" : "default",
+      projectName: mostRecent ? mostRecent.projectName || null : null,
+      createdAt: earliest ? earliest.createdAt : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mergedMemories.push(merged);
+    removedIds.push(...groupMemories.map((m) => m.id));
+    mergedGroupCount++;
+  }
+
+  const removedSet = new Set(removedIds);
+  for (const m of deduped) {
+    if (!removedSet.has(m.id)) {
+      mergedMemories.push(m);
+    }
+  }
+
+  db.memories = mergedMemories.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  await writeJsonFile(filePath, db);
+
+  return {
+    originalCount: allMemories.length,
+    exactDeletedCount: dedupResult.deletedExactIds.length,
+    similarityDeletedCount: dedupResult.deletedSimilarIds.length,
+    mergedGroupCount,
+    removedCount: dedupResult.deletedCount + removedIds.length,
+    keptCount: mergedMemories.length,
+    mergedMemories,
+    stats: {
+      dedup: dedupResult,
+      digest: { mergedGroupCount, removedCount: removedIds.length, keptCount: mergedMemories.length },
+    },
+  };
+}
+
 export async function optimizeMemories(scope = "default", threshold = 0.65) {
   const isProjectScope = scope && scope.startsWith("project:");
   const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
@@ -1042,6 +1188,8 @@ export const localStorage = {
   cleanupExpiredMemories,
   cleanupTrash,
   getTtlDaysForMemory,
+  deduplicateMemoriesArray,
+  mergeDedupAndDigestMemories,
   optimizeMemories,
   digestMemories,
   organizeMemoriesWithLLM,

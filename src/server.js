@@ -197,6 +197,12 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         const scope = body.scope || "default";
         const result = await storage.optimizeMemories(scope);
         sendJson(res, 200, result);
+      } else if (path === "/api/memory/merge" && method === "POST") {
+        const body = await parseBody(req);
+        const scope = body.scope || "default";
+        const threshold = body.threshold ?? 0.65;
+        const result = await storage.mergeDedupAndDigestMemories(scope, threshold);
+        sendJson(res, 200, result);
       } else if (path === "/api/memory/organize" && method === "POST") {
         const body = await parseBody(req);
         const scope = body.scope || "default";

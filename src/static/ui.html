@@ -404,8 +404,7 @@
         <input id="contextProjectRoot" type="text" placeholder="Project root for context (optional)" />
         <button id="contextSearchButton" class="secondary">Contextual Search</button>
         <button id="searchButton" class="secondary">Search</button>
-        <button id="optimizeMemoryButton" class="secondary">Optimize Memory</button>
-        <button id="digestMemoryButton" class="secondary">Digest Memories</button>
+        <button id="dedupDigestButton" class="secondary">Deduplicate & Digest</button>
         <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
       </div>
 
@@ -1185,36 +1184,20 @@
     }
     document.getElementById("organizeGraphButton").addEventListener("click", loadOrganizeGraph);
     document.getElementById("retrieveButton").addEventListener("click", runDualRouteRetrieve);
-    document.getElementById("optimizeMemoryButton").addEventListener("click", async () => {
+    document.getElementById("dedupDigestButton").addEventListener("click", async () => {
       const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
-      if (!confirm("Optimize memories in scope \"" + scope + "\"? This will merge duplicate content and delete redundant entries.")) return;
+      if (!confirm("Deduplicate and digest memories in scope \"" + scope + "\"? This will remove duplicate content, merge similar memories, and keep consolidated summaries.")) return;
       try {
-        const result = await request("/memory/optimize", {
-          method: "POST",
-          body: JSON.stringify({ scope }),
-        });
-        toast(`Optimized: ${result.deletedCount} deleted, ${result.keptCount} kept.`, "success");
-        settingsLoaded = false;
-        await loadMemories();
-        await loadStats();
-      } catch (e) {
-        toast("Error: " + e.message, "error");
-      }
-    });
-    document.getElementById("digestMemoryButton").addEventListener("click", async () => {
-      const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
-      if (!confirm("Digest memories in scope \"" + scope + "\"? This will group similar memories and merge them into consolidated summaries.")) return;
-      try {
-        const result = await request("/memory/digest", {
+        const result = await request("/memory/merge", {
           method: "POST",
           body: JSON.stringify({ scope }),
         });
         document.getElementById("digestResults").style.display = "block";
-        document.getElementById("digestSummary").textContent = `Digest completed: ${result.mergedGroupCount} groups merged, ${result.removedCount} duplicate memories removed, ${result.keptCount} consolidated memories kept.`;
+        document.getElementById("digestSummary").textContent = `Deduplicated ${result.exactDeletedCount} exact duplicates, removed ${result.similarityDeletedCount} near duplicates, merged ${result.mergedGroupCount} groups, removed ${result.removedCount} total memories, kept ${result.keptCount}.`;
         const list = document.getElementById("digestGroupList");
         list.innerHTML = "";
-        if (result.mergedGroupCount === 0) {
-          list.innerHTML = `<div class="empty">No similar memories found to merge.</div>`;
+        if (result.mergedGroupCount === 0 && result.exactDeletedCount === 0 && result.similarityDeletedCount === 0) {
+          list.innerHTML = `<div class="empty">No duplicates or similar memories found to merge.</div>`;
         } else {
           for (const m of result.mergedMemories) {
             const card = document.createElement("div");

@@ -122,11 +122,10 @@
 
 ### Step 10：分組與去重合併流程與 UI 更新
 
-- [ ] 將 `organizeMemoriesWithLLM` 與 `optimizeMemories` 合併為 `optimizeAndGroupMemories` 單一流程，先分群後去重。
-- [ ] 實作 `src/storage/local.js::optimizeAndGroupMemories(scope, threshold)` 返回 grouped + merged reports。
-- [ ] 更新 `/api/memory/optimize` endpoint 與 UI 按鈕，顯示合併後分組與剩餘唯一記憶。
-- [ ] 更新 `src/static/ui.html` 的分組去重介面，合併「分組」與「去重」tab 為單一「Optimize Memory」區域。
-- [ ] 測試：`tests/optimize.test.js`，涵蓋分群＋去重流程。
+- [x] 實作 `deduplicateMemoriesArray` 與 `mergeDedupAndDigestMemories`，合併精確與相似去重和分群摘要。
+- [x] 在 `src/storage/local.js` 和 `src/server.js` 新增 `/api/memory/merge` endpoint。
+- [x] 更新 `src/static/ui.html`，將「Optimize Memory」與「Digest Memories」合併為「Deduplicate & Digest」按鈕，並顯示完整合併與去重統計。
+- [x] 測試：`tests/merge.test.js`，涵蓋分群＋去重流程。
 
 ### Step 11：圖索引與儲存資料同步優化
 
