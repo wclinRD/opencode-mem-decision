@@ -48,7 +48,7 @@ export function looksSensitive(text) {
   return SENSITIVE_PATTERNS.some(({ pattern }) => pattern.test(text));
 }
 
-export function classifyMemory(text) {
+export function classifyMemory(text, options = {}) {
   if (typeof text !== "string") return { type: "fact", confidence: 0.5, sensitive: false };
   const sensitive = looksSensitive(text);
   let type = "fact";
@@ -72,10 +72,19 @@ export function classifyMemory(text) {
     if (count > 0 && t !== "fact") break;
   }
   const lengthScore = text.length < 40 ? 0 : text.length >= 150 ? 0.05 : 0;
-  confidence = Math.min(1, confidence + lengthScore);
+  const sensitivityAdjustment = sensitive ? -0.1 : 0;
+  confidence = Math.min(1, confidence + lengthScore + sensitivityAdjustment);
   const priority = confidence >= 0.8 ? 2 : confidence >= 0.65 ? 1 : 0;
   const tags = extractTags(text, type);
   return { type, confidence, sensitive, priority, tags };
+}
+
+export function calculateWeightedConfidence(baseConfidence, sensitivity, createdAt, contextWindowUsage, memoryCount) {
+  const timeDecay = createdAt ? Math.max(0, 1 - (Date.now() - Date.parse(createdAt)) / (30 * 86400000)) : 1;
+  const contextFactor = contextWindowUsage !== undefined ? (contextWindowUsage >= 0.7 ? 0.85 : contextWindowUsage >= 0.5 ? 0.95 : 1) : 1;
+  const countFactor = memoryCount && memoryCount > 1000 ? 0.9 : 1;
+  const sensitivityAdjust = sensitivity === "sensitive" ? -0.15 : 0;
+  return Math.max(0.2, Math.min(1, baseConfidence * timeDecay * contextFactor * countFactor + sensitivityAdjust));
 }
 
 const TECH_VOCAB = new Set([

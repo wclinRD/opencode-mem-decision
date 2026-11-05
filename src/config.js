@@ -14,6 +14,7 @@ const DEFAULT_CONFIG = {
     filterInjectedPrompts: true,
     captureChildSessions: false,
     contextWindowSize: 128000,
+    fallbackRetrieval: true,
   },
   updateOnCaptureEnabled: true,
   updateOnCaptureSimilarityThreshold: 0.75,

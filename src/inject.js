@@ -32,6 +32,7 @@ export async function injectMemories({
   storage,
   contextWindowSize,
   activeProject,
+  fallbackEnabled = false,
 }) {
   if (!memoryConfig.chatMessage?.enabled) return [];
 
@@ -89,6 +90,25 @@ export async function injectMemories({
     return true;
   });
 
+  // Fallback retrieval for cut-off fragments
+  let fallbackResults = [];
+  if (fallbackEnabled) {
+    const budget = dynamicBudget(0.75);
+    const limit = budget.chunkLimit || 600;
+    const query = sessionData?.latestMessage || sessionData?.messages?.slice(-1)?.[0]?.content || "";
+    const truncated = candidates.some((m) => m.content.length > limit);
+    if (truncated) {
+      fallbackResults = await buildFallbackRetrievalNote(query, effectiveScope, storage);
+      const fallbackIds = new Set(fallbackResults.map((m) => m.id));
+      for (const m of fallbackResults) {
+        if (!seenIds.has(m.id) && !fallbackIds.has(m.id)) {
+          seenIds.add(m.id);
+          candidates.push(m);
+        }
+      }
+    }
+  }
+
   const filtered = candidates.slice(0, maxMemories);
 
   if (memoryConfig.chatMessage.filterInjectedPrompts) {
@@ -116,17 +136,66 @@ export function formatInjectedPrompt(memories, fillRatio) {
   const limit = budget.chunkLimit || 600;
   const maxChunks = budget.maxChunks || 5;
 
+  let pages = [];
+  let truncatedCount = 0;
+
   const blocks = memories
     .slice(0, maxChunks)
     .map((m) => {
-      const text = truncateText(m.content, limit);
-      return `--- Memory ${m.id} (${m.type}, conf ${m.confidence}) ---\n${text}\n---\n`;
+      const split = splitMemoryContent(m.content, limit, { id: m.id, type: m.type, confidence: m.confidence, priority: m.priority });
+      const pageBlocks = split.map((page) => formatPageInjectedPrompt(page, fillRatio));
+      const combined = pageBlocks.join("\n");
+      if (split.length > 1) truncatedCount += split.length - 1;
+      return combined;
     })
+    .filter(Boolean)
     .join("\n");
 
-  return `=== Memory Context ===\n` + blocks + `=== End Memory ===\n\nPrecedence rules:\n1. Latest user instruction in the current dialogue always wins.\n2. Session-scoped notes override global defaults for this conversation.\n3. Global long-term memory is the baseline.\nWhen a current instruction contradicts a stored preference, follow the current instruction and update session notes accordingly.`;
+  const fallbackNote = formatFallbackRetrievalNote(truncatedCount);
+
+  return `=== Memory Context ===\n` + blocks + (fallbackNote ? fallbackNote : "") + `\n=== End Memory ===\n\nPrecedence rules:\n1. Latest user instruction in the current dialogue always wins.\n2. Session-scoped notes override global defaults for this conversation.\n3. Global long-term memory is the baseline.\nWhen a current instruction contradicts a stored preference, follow the current instruction and update session notes accordingly.`;
 }
 
 function truncateText(text, limit) {
   return text.length > limit ? text.slice(0, limit - 3) + "..." : text;
+}
+
+export function splitMemoryContent(content, limit, metadata = {}) {
+  if (content.length <= limit) return [{ page: 1, text: content, truncated: false, metadata }];
+  const sentences = content.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+  const pages = [];
+  let currentPage = "";
+  let page = 1;
+  for (const s of sentences) {
+    const candidate = currentPage + (currentPage ? " " : "") + s;
+    if (candidate.length <= limit) {
+      currentPage = candidate;
+    } else {
+      pages.push({ page, text: currentPage, truncated: currentPage.length === limit, metadata });
+      currentPage = s;
+      page++;
+    }
+  }
+  if (currentPage) pages.push({ page, text: currentPage, truncated: currentPage.length === limit, metadata });
+  return pages;
+}
+
+export function formatPageInjectedPrompt(page, fillRatio) {
+  const budget = dynamicBudget(fillRatio);
+  if (!budget.enabled) return "";
+  return `--- Memory Page ${page.page} (${page.metadata.id}, ${page.metadata.type}, conf ${page.metadata.confidence}) ---\n${page.text}\n---\n`;
+}
+
+export function buildFallbackRetrievalNote(query, scope, storage) {
+  // Fallback retrieval for cut-off memory fragments: retrieve related memories by query and scope.
+  // We perform a broad search for keywords from the cut-off fragment and return top related memories.
+  const queryTokens = query.split(/\s+/).filter(Boolean);
+  if (queryTokens.length < 2) return { related: [] };
+  const keywordQuery = queryTokens.slice(0, 5).join(" ");
+  return storage.searchMemories(keywordQuery, { scope, includeExpired: true, limit: 5 }) || [];
+}
+
+export function formatFallbackRetrievalNote(truncatedCount) {
+  if (truncatedCount <= 0) return "";
+  return `\n[Note] ${truncatedCount} memory items were truncated due to context limits. Use the memory tool retrieve mode with scope filters to recover full fragments or related memories.\n`;
 }

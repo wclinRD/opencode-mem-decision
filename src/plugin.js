@@ -318,6 +318,7 @@ export default Plugin.define({
           storage,
           contextWindowSize: memoryConfig.chatMessage?.contextWindowSize || 128000,
           activeProject,
+          fallbackEnabled: memoryConfig.chatMessage?.fallbackRetrieval !== false,
         });
         const fillRatio = calculateFillRatio(event.prompt.text, memoryConfig.chatMessage?.contextWindowSize || 128000);
         const block = formatInjectedPrompt(memories, fillRatio);
@@ -363,7 +364,7 @@ export default Plugin.define({
               continue;
             }
 
-            const classified = classifyMemory(filteredText);
+            const classified = classifyMemory(filteredText, { contextWindowUsage: 0.5, memoryCount: 1 });
             console.log(`[opencode-mem-decision] auto-capture classify: ${classified.type}, text length ${filteredText.length}`);
 
             await logEvent({

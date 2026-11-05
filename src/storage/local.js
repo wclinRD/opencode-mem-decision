@@ -9,6 +9,7 @@ import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
 import { randomBytes } from "node:crypto";
 import { buildHierarchicalGraph } from "../organize.js";
 import { saveGraph, loadGraph } from "./graph.js";
+import { classifyMemory, calculateWeightedConfidence } from "../classify.js";
 
 let currentEmbeddingService = null;
 let encryptionKey = null;
@@ -301,11 +302,25 @@ export async function searchMemories(query, filters = {}) {
   if (vectorSearch && currentEmbeddingService && query && query.length > 0) {
     try {
       const queryVec = await currentEmbeddingService.embed(query);
+      const memoryCount = scoped.length;
+      const nowMs = Date.now();
       return scoped
         .filter((memory) => memory.embedding && memory.embedding.length === queryVec.length)
-        .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, queryVec) }))
-        .filter((entry) => entry.similarity >= similarityThreshold)
-        .sort((a, b) => b.similarity - a.similarity)
+        .map((memory) => {
+          const sim = cosineSimilarity(memory.embedding, queryVec);
+          const weightedConfidence = calculateWeightedConfidence(
+            Number(memory.confidence) || 0.5,
+            memory.sensitivity,
+            memory.createdAt,
+            undefined,
+            memoryCount
+          );
+          const recencyFactor = memory.createdAt ? Math.max(0, 1 - (nowMs - Date.parse(memory.createdAt)) / (30 * 86400000)) : 1;
+          const combinedScore = Math.max(0, sim + weightedConfidence * recencyFactor + Number(memory.priority) * 0.1);
+          return { memory, combinedScore };
+        })
+        .filter((entry) => entry.combinedScore >= similarityThreshold)
+        .sort((a, b) => b.combinedScore - a.combinedScore)
         .map((entry) => attachProjectName(entry.memory));
     } catch (e) {
       console.error(`[opencode-mem] vector search failed: ${e.message}`);
@@ -322,14 +337,27 @@ export async function searchMemories(query, filters = {}) {
       .map(attachProjectName);
   }
 
+  // Compute memory count for context factor
+  const memoryCount = scoped.length;
+  const nowMs = Date.now();
+
   return scoped
     .map((memory) => {
       const memoryTokens = new Set(tokenize(memory.content));
       const score = queryTokens.reduce((total, token) => total + (memoryTokens.has(token) ? 1 : 0), 0);
-      return { memory, score };
+      const weightedConfidence = calculateWeightedConfidence(
+        Number(memory.confidence) || 0.5,
+        memory.sensitivity,
+        memory.createdAt,
+        undefined, // context window usage not available here; use default factor
+        memoryCount
+      );
+      const recencyFactor = memory.createdAt ? Math.max(0, 1 - (nowMs - Date.parse(memory.createdAt)) / (30 * 86400000)) : 1;
+      const combinedScore = score > 0 ? (score + weightedConfidence * recencyFactor + Number(memory.priority) * 0.1) : 0;
+      return { memory, combinedScore };
     })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || new Date(b.createdAt) - new Date(a.createdAt))
+    .filter((entry) => entry.combinedScore > 0)
+    .sort((a, b) => b.combinedScore - a.combinedScore || new Date(b.createdAt) - new Date(a.createdAt))
     .map((entry) => attachProjectName(entry.memory));
 }
 
@@ -345,15 +373,30 @@ export async function listMemories(limit = 50, scope = "default", ttlConfig = {}
   const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
+  const memoryCount = db.memories.length;
+  const nowMs = Date.now();
+
   return db.memories
     .filter((m) => scope === "default" || m.scope === scope)
     .filter((memory) => {
       const cutoff = new Date(Date.now() - getTtlDaysForMemory(memory, ttlConfig) * 86400000).toISOString();
       return memory.createdAt >= cutoff;
     })
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((memory) => {
+      const weightedConfidence = calculateWeightedConfidence(
+        Number(memory.confidence) || 0.5,
+        memory.sensitivity,
+        memory.createdAt,
+        undefined,
+        memoryCount
+      );
+      const recencyFactor = memory.createdAt ? Math.max(0, 1 - (nowMs - Date.parse(memory.createdAt)) / (30 * 86400000)) : 1;
+      const score = weightedConfidence * recencyFactor + Number(memory.priority) * 0.1;
+      return { memory, score };
+    })
+    .sort((a, b) => b.score - a.score || new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, limit)
-    .map(attachProjectName);
+    .map((v) => attachProjectName(v.memory));
 }
 
 export async function getMemory(id) {
