@@ -68,9 +68,34 @@
 - [x] 更新 `doc/handover.md` 與 `README.md`（標明 Web UI 為實作，說明設定頁功能）。
 - [x] `git add -A && npm test && git commit`。
 
+### Step 6：HybridTagGraph Memory（靜態標籤分組＋動態分層/圖檢索）
+
+- [ ] 研究靜態標籤分組與動態分層/圖檢索的最新演算法（Mnemis、MemTree、TagRAG、TAGGRAPH）。
+- [ ] 定義記憶分層模型：Base Memory（原始）、Summary Node（摘要）、Principle/Category Node（分類抽象）。
+- [ ] 實作 `src/organize.js`：
+  - [ ] 生成 Base / Summary / Category 節點並建立 adjacency graph。
+  - [ ] 支援 tag overlap / keyword 相似度建邊。
+  - [ ] 支援時間邊（temporal edges）。
+- [ ] 實作 `src/retrieval.js`：
+  - [ ] System-1 Similarity Search（tags + keyword/vector similarity）。
+  - [ ] System-2 Global Selection（沿 hierarchy 遍歷取相關社群與原始記憶）。
+- [ ] 實作 `src/storage/graph.js`：圖結構 JSON/Markdown 儲存與載入。
+- [ ] 更新 `src/static/ui.html`：增加「Organize Memory」section，顯示分層組織與檢索結果。
+- [ ] 實作 `POST /api/memory/organize` 與 `POST /api/memory/retrieve`。
+- [ ] 補充測試（`organize.test.js`、`retrieval.test.js`、`graph.test.js`）。
+- [ ] 更新 `doc/handover.md`。
+- [ ] 同步 `src/static/ui.html` 至全局 plugin。
+
+### Step 7：後續高階整合（Phase 2，可选）
+
+- [ ] 整合 vector embedding（遠端 API / Hugging Face / local stub）。
+- [ ] 使用 LLM summarization 生成 Summary / Principle 節點。
+- [ ] AdaptiveGraph（personalized PageRank diffusion）與多跳查詢優化。
+
 ## 優先級建議
 
-1. Step 2（TTL/清理）：直接提升記憶庫品質，減少垃圾。
-2. Step 3（元數據保留）：確保 update 不會丟失質量標籤。
-3. Step 4（工具增強）：便於管理與查詢。
-4. Step 5（高階整合）：長期規劃，依資源安排。
+1. Step 6（HybridTagGraph）：補足靜態標籤分組的關聯與全局檢索能力，實用且可落地。
+2. Step 2（TTL/清理）：直接提升記憶庫品質，減少垃圾。
+3. Step 3（元數據保留）：確保 update 不會丟失質量標籤。
+4. Step 4（工具增強）：便於管理與查詢。
+5. Step 5（高階整合）：長期規劃，依資源安排。
