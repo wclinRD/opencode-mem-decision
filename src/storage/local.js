@@ -6,6 +6,7 @@ import { redactCredentials } from "../security.js";
 import { deriveKey, encryptData, decryptData } from "./encryption.js";
 import { ensureSchema } from "./migrations.js";
 import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
+import { calculateSimilarity } from "../capture.js";
 import { randomBytes } from "node:crypto";
 import { buildHierarchicalGraph } from "../organize.js";
 import { saveGraph, loadGraph } from "./graph.js";
@@ -208,7 +209,7 @@ function normalizeContent(content) {
   return String(content || "").toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-export async function optimizeMemories(scope = "default") {
+export async function optimizeMemories(scope = "default", threshold = 0.65) {
   const isProjectScope = scope && scope.startsWith("project:");
   const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -237,9 +238,34 @@ export async function optimizeMemories(scope = "default") {
     deletedIds.push(...group.slice(1).map((m) => m.id));
   }
 
-  db.memories = kept;
+  const similarityDeletedIds = [];
+  const remaining = kept.filter((m) => !deletedIds.includes(m.id));
+  const finalKept = [];
+  for (const m of remaining) {
+    const redacted = redactCredentials(m.content || "");
+    let dup = false;
+    for (const existing of finalKept) {
+      const existingRedacted = redactCredentials(existing.content || "");
+      if (calculateSimilarity(redacted, existingRedacted) >= threshold) {
+        dup = true;
+        break;
+      }
+    }
+    if (dup) {
+      similarityDeletedIds.push(m.id);
+    } else {
+      finalKept.push(m);
+    }
+  }
+
+  db.memories = finalKept;
   await writeJsonFile(filePath, db);
-  return { deletedCount: deletedIds.length, keptCount: kept.length };
+  return {
+    exactDeletedCount: deletedIds.length,
+    similarityDeletedCount: similarityDeletedIds.length,
+    deletedCount: deletedIds.length + similarityDeletedIds.length,
+    keptCount: finalKept.length,
+  };
 }
 
 export async function organizeMemoriesWithLLM(config, memories) {

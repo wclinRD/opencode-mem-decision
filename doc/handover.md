@@ -63,23 +63,24 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - Fixed prompt hook tests by ensuring memory scope matches default recall scope and injection filters don't overfilter.
 - All 107 tests currently pass.
 
-## Phase 9: LLM-Driven Memory Organization and UI Groups
-- Changed the web UI's "Optimize Memory" button to "Organize by Topic", which calls the backend to group memories by topic using an LLM or local clustering, and returns structured `groups` with `category` and `memoryIds`.
-- Added `organizeMemoriesWithLLM(config, memories)` to `src/storage/local.js` that calls an LLM via configured `extractionApiUrl`/`extractionModel`/`extractionApiKey` to generate meaningful topic categories, with a local fallback based on technical keywords.
-- Updated `/api/memory/optimize` POST endpoint to return the organized groups instead of deleting duplicates; added `showGroupMemories` in the UI to display grouped memory cards by category.
-- All 109 tests continue to pass.
+## Phase 9: Automatic Memory Deduplication and Optimization
+- Restored `/api/memory/optimize` POST endpoint to actually delete duplicate memories instead of only grouping them.
+- `optimizeMemories(scope, threshold)` now performs two rounds: exact-content duplicate merging, then similarity-based near-duplicate detection using `calculateSimilarity` with a default threshold of 0.65, catching long prompts with shared prefixes but different execution details.
+- Deleted redundant memories are removed from storage; the endpoint returns `{ exactDeletedCount, similarityDeletedCount, deletedCount, keptCount }`.
+- Web UI button label remains "Optimize Memory", confirms before deletion, and shows a toast with the optimized counts.
+- All 109 tests pass; actual memory database was reduced from 35 to 21 entries after running the new optimization.
 
 ## Key Files Changed
 - `src/classify.js`: dynamic tagging and weighted confidence functions.
 - `src/organize.js`: BM25 text similarity and graph construction.
-- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, and LLM-based memory organization (`organizeMemoriesWithLLM`, `organizeLocal`) with local keyword clustering fallback.
+- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, and `optimizeMemories` with exact + similarity-based near-duplicate detection (threshold 0.65).
 - `src/retrieval.js`: dual-route retrieval simulation and BM25 scoring.
 - `src/capture.js`: session filtering, summarization, sensitive detection, and noise heuristic `isGenericOrNoiseText`.
 - `src/inject.js`: context-aware splitting, fallback retrieval, injection formatting, and candidate filtering with default confidence/type fallbacks.
 - `src/plugin.js`: tool schema and injection integration with memory modes; added knowledge-search and knowledge-import modes.
 - `src/tools/memoryTools.js`: knowledge tool schema extended with search and import modes.
-- `src/server.js`: memory endpoints updated; `/api/memory/optimize` now returns organized topic groups using LLM/local method; added POST `/api/knowledge/search`.
-- `src/static/ui.html`: changed optimization button label to "Organize by Topic", added organized groups container and `showGroupMemories` to display grouped cards by category.
+- `src/server.js`: memory endpoints updated; `/api/memory/optimize` now calls `storage.optimizeMemories(scope)` to remove duplicates.
+- `src/static/ui.html`: "Optimize Memory" button confirms before deleting and displays toast with exact/similarity deleted counts.
 - `src/config.js`: new `fallbackRetrieval` default option; updated `recallScope` default to `"default"`.
 - `tests/storage.test.js`: added unit tests for `searchKnowledge` and `importKnowledgeFromDirectory`.
 - `tests/inject.test.js`, `tests/plugin.test.js`: updated injection and prompt hook tests for default scope behavior.
