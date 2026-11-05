@@ -1,25 +1,25 @@
 # Memory Plugin Strengthening Roadmap
 
 ## Phase 1: Dynamic Tag Extraction
-- [ ] Replace fixed `classify.js` tech regex with dynamic domain/skill tagging
-- [ ] Extend tag categories: language, framework, platform, error type, workflow
-- [ ] Add confidence-weighted tag extraction fallback (LLM or keyword clustering)
-- [ ] Unit tests for tag extraction across different memory types
+- [x] Replace fixed `classify.js` tech regex with dynamic domain/skill tagging
+- [x] Extend tag categories: language, framework, platform, error type, workflow
+- [x] Add confidence-weighted tag extraction fallback (LLM or keyword clustering)
+- [x] Unit tests for tag extraction across different memory types
 
 ## Phase 2: Graph Construction Layer
-- [ ] Implement similarity computation: Jaccard over tags + BM25/TF-IDF over text
-- [ ] Add semantic edges between Base Memory nodes based on threshold
-- [ ] Build community clustering (same tags + time proximity)
-- [ ] Create Summary Node generation from clustered communities
-- [ ] Add temporal edges (time-based links for AdaptiveGraph)
-- [ ] Validate graph consistency and no orphan nodes
+- [x] Implement similarity computation: Jaccard over tags + BM25/TF-IDF over text
+- [x] Add semantic edges between Base Memory nodes based on threshold
+- [x] Build community clustering (same tags + time proximity)
+- [x] Create Summary Node generation from clustered communities
+- [x] Add temporal edges (time-based links for AdaptiveGraph)
+- [x] Validate graph consistency and no orphan nodes
 
 ## Phase 3: Dual-Route Retrieval
-- [ ] System-1 Similarity Search: tag-filtered keyword/vector lookup
-- [ ] System-2 Global Selection: traverse Category/Principle nodes via tag chains
-- [ ] Routing logic based on query type (fact vs global aggregation)
+- [x] System-1 Similarity Search: tag-filtered keyword/vector lookup
+- [x] System-2 Global Selection: traverse Category/Principle nodes via tag chains
+- [x] Routing logic based on query type (fact vs global aggregation)
 - [ ] Benchmark dual-route vs single flat search accuracy
-- [ ] Ensure backward compatibility with existing `search` and `list`
+- [x] Ensure backward compatibility with existing `search` and `list`
 
 ## Phase 4: Layered Storage Implementation
 - [ ] Introduce Base Memory, Summary Node, Category/Principle Node schemas
@@ -46,3 +46,9 @@
 - Each phase must pass unit and integration tests before commit.
 - Commit per completed phase with clear description.
 - If opencode context exceeds 75% of capacity, pause implementation and show user current state for review.
+
+## Current Status
+- Phase 1 committed: `c8e0637`
+- Phase 2 committed: `bd73e05`
+- Phase 3 core routing integrated into retrieval flow.
+- Phase 4–6 pending implementation and testing.
