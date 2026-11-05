@@ -9,7 +9,7 @@ import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
 import { calculateSimilarity, summarizeLongText } from "../capture.js";
 import { randomBytes } from "node:crypto";
 import { buildHierarchicalGraph } from "../organize.js";
-import { saveGraph, loadGraph } from "./graph.js";
+import { saveGraph, loadGraph, syncGraphToStorage, rebuildGraphIndexIfStale } from "./graph.js";
 import { classifyMemory, calculateWeightedConfidence } from "../classify.js";
 import { attachProjectContext } from "../retrieval.js";
 import { resolveProjectContext } from "../projectShared.js";
@@ -182,7 +182,22 @@ export async function addMemory(content, scope = "project", sessionId, metadata 
 
   db.memories.push(memory);
   await writeJsonFile(filePath, db);
+  await syncGraphAfterMemoryChange(db, "default");
   return memory;
+}
+
+async function syncGraphAfterMemoryChange(db, scope) {
+  try {
+    const graphData = await loadGraph();
+    if (!graphData) return;
+    if (rebuildGraphIndexIfStale(db, graphData)) {
+      await buildGraphAndPersist(scope);
+    } else {
+      await syncGraphToStorage(graphData, db);
+    }
+  } catch (e) {
+    console.warn(`[opencode-mem] graph sync after memory change failed: ${e.message}`);
+  }
 }
 
 export function tokenize(text) {
@@ -764,6 +779,7 @@ export async function deleteMemory(id) {
   if (index >= 0) {
     db.memories.splice(index, 1);
     await writeJsonFile(filePath, db);
+    await syncGraphAfterMemoryChange(db, "default");
     return true;
   }
   return false;
@@ -867,6 +883,7 @@ export async function updateMemory(id, updates) {
 
   Object.assign(memory, { updatedAt: new Date().toISOString() });
   await writeJsonFile(filePath, db);
+  await syncGraphAfterMemoryChange(db, "default");
   return memory;
 }
 
@@ -956,6 +973,8 @@ export async function buildGraphAndPersist(scope = "default") {
   const db = await readJsonFile(filePath);
   const memories = (db.memories || []).map(attachProjectName);
   const graphData = buildHierarchicalGraph(memories, { similarityThreshold: 0.4 });
+  graphData.lastModified = new Date().toISOString();
+  graphData.version = 1;
   await saveGraph(graphData);
   return graphData;
 }
@@ -1190,6 +1209,8 @@ export const localStorage = {
   getTtlDaysForMemory,
   deduplicateMemoriesArray,
   mergeDedupAndDigestMemories,
+  rebuildGraphIndexIfStale,
+  syncGraphToStorage,
   optimizeMemories,
   digestMemories,
   organizeMemoriesWithLLM,

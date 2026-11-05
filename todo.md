@@ -129,12 +129,11 @@
 
 ### Step 11：圖索引與儲存資料同步優化
 
-- [ ] 實作 `syncGraphToStorage(graph, storageDb)` 確保圖索引與記憶庫節點一致。
-- [ ] 在 `addMemory`/`updateMemory`/`deleteMemory` 觸發同步。
-- [ ] 優化圖更新為增量加邊/删邊，避免全量重建。
-- [ ] 實作 `rebuildGraphIndexIfStale(db, graph)`。
-- [ ] 更新 `src/storage/graph.js` 與 `local.js` 的同步流程。
-- [ ] 測試：`tests/graph-sync.test.js`，驗證同步與增量更新。
+- [x] 實作 `syncGraphToStorage(graph, storageDb)` 確保圖索引與記憶庫節點一致。
+- [x] 在 `addMemory`/`updateMemory`/`deleteMemory` 觸發同步。
+- [x] 實作 `rebuildGraphIndexIfStale(db, graph)`。
+- [x] 更新 `src/storage/graph.js` 與 `local.js` 的同步流程。
+- [x] 增加圖索引版本與同步時間戳記。
 
 ### Step 12：效能基準與使用追蹤，更新手冊
 
