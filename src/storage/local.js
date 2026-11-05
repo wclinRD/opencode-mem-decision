@@ -201,6 +201,44 @@ export function getTtlDaysForMemory(memory, config) {
   return defaultDays;
 }
 
+function normalizeContent(content) {
+  return String(content || "").toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+export async function optimizeMemories(scope = "default") {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+
+  const groups = new Map();
+  for (const m of db.memories || []) {
+    const key = normalizeContent(m.content);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+
+  const kept = [];
+  const deletedIds = [];
+  for (const [, group] of groups) {
+    if (group.length === 1) {
+      kept.push(group[0]);
+      continue;
+    }
+    group.sort((a, b) => {
+      const confA = Number(a.confidence || 0.5);
+      const confB = Number(b.confidence || 0.5);
+      if (confB !== confA) return confB - confA;
+      return new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
+    kept.push(group[0]);
+    deletedIds.push(...group.slice(1).map((m) => m.id));
+  }
+
+  db.memories = kept;
+  await writeJsonFile(filePath, db);
+  return { deletedCount: deletedIds.length, keptCount: kept.length };
+}
+
 export async function cleanupExpiredMemories(config) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -583,4 +621,5 @@ export const localStorage = {
   cleanupExpiredMemories,
   cleanupTrash,
   getTtlDaysForMemory,
+  optimizeMemories,
 };

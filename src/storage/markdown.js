@@ -61,6 +61,10 @@ function createFrontMatter(memory) {
   return lines.join("\n");
 }
 
+function normalizeContent(content) {
+  return String(content || "").toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 async function readMarkdownFile(id, scope) {
   const filePath = memoryFilePath(id, scope);
   try {
@@ -191,6 +195,48 @@ export async function deleteMemory(id, scope = "default") {
 
 export async function listAllMemories(scope = "default") {
   return listMemories(10000, scope);
+}
+
+export async function optimizeMemories(scope = "default") {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const baseDir = isProjectScope ? path.dirname(projectStoragePath(scope)) : vaultPath();
+  await fs.mkdir(baseDir, { recursive: true });
+  const files = (await fs.readdir(baseDir, { withFileTypes: true }))
+    .filter((d) => d.name.endsWith(".md"))
+    .map((d) => d.name.slice(0, -3));
+
+  const allMemories = (await Promise.all(files.map((id) => readMarkdownFile(id, scope)))).filter(Boolean);
+  const groups = new Map();
+  for (const m of allMemories) {
+    const key = normalizeContent(m.content);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+
+  let deletedCount = 0;
+  const kept = [];
+  for (const [, group] of groups) {
+    if (group.length === 1) {
+      kept.push(group[0]);
+      continue;
+    }
+    group.sort((a, b) => {
+      const confA = Number(a.confidence || 0.5);
+      const confB = Number(b.confidence || 0.5);
+      if (confB !== confA) return confB - confA;
+      return new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
+    kept.push(group[0]);
+    for (const m of group.slice(1)) {
+      try {
+        await fs.unlink(memoryFilePath(m.id, scope));
+      } catch (e) {
+        if (e.code !== "ENOENT") throw e;
+      }
+      deletedCount += 1;
+    }
+  }
+  return { deletedCount, keptCount: kept.length };
 }
 
 export const markdownStorage = {
