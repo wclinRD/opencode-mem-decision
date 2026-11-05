@@ -9,7 +9,7 @@ import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory } from "./classify.js";
 import { EmbeddingService } from "./embedding.js";
 import { ExtractionService } from "./extraction.js";
-import { setEmbeddingService } from "./storage/local.js";
+import { setEmbeddingService, calculateMemoryUtilityScore, getTtlDaysForMemory } from "./storage/local.js";
 import { skillsStorage } from "./skills.js";
 import { resolveProjectShared } from "./projectShared.js";
 import { simulateDualRouteRetrieve } from "./retrieval.js";
@@ -23,7 +23,7 @@ const injectedSessions = new Set();
 const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
   "export", "import", "list-shards", "dream", "restore-trash",
-  "organize", "retrieve",
+  "organize", "retrieve", "utility",
   "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete", "knowledge-search", "knowledge-import",
   "skill-list", "skill-show", "skill-save", "skill-delete",
 ];
@@ -177,6 +177,21 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
       memories = baseMemories;
     }
     return simulateDualRouteRetrieve(args.query || "", memories, graphData, args.filters || {});
+  }
+  if (mode === "utility") {
+    const effectiveScope = projectScope || (args.scope || "default");
+    const memories = await storage.listMemories(args.limit || 500, effectiveScope);
+    return memories.map((m) => ({
+      id: m.id,
+      content: m.content,
+      type: m.type,
+      confidence: m.confidence,
+      tags: m.tags,
+      priority: m.priority,
+      sensitivity: m.sensitivity,
+      utilityScore: calculateMemoryUtilityScore(m),
+      ttlDays: getTtlDaysForMemory(m, memoryConfig),
+    }));
   }
 
   throw new Error(`Unknown memory mode: ${mode}`);

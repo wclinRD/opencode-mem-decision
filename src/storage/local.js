@@ -187,11 +187,32 @@ export function tokenize(text) {
   return String(text ?? "").toLowerCase().match(/[a-z0-9_-]+/g) || [];
 }
 
+export function calculateMemoryUtilityScore(memory) {
+  const typeScores = {
+    preference: 0.9,
+    rule: 0.85,
+    lesson: 0.8,
+    fact: 0.6,
+    unknown: 0.4,
+    sensitive: 0.5,
+  };
+  const base = typeScores[memory.type] || typeScores.fact || 0.6;
+  const confidenceScore = Number(memory.confidence || 0) * 0.5;
+  const tagRichness = Math.min((memory.tags?.length || 0) * 0.05, 0.25);
+  const lengthScore = Math.min(String(memory.content || "").length / 500, 1) * 0.2;
+  const priorityScore = (Number(memory.priority) || 0) * 0.05;
+  const recencyScore = memory.updatedAt
+    ? Math.max(0, 1 - (Date.now() - Date.parse(memory.updatedAt)) / (30 * 86400000))
+    : 0;
+  return Math.round((base + confidenceScore + tagRichness + lengthScore + priorityScore + recencyScore * 0.3) * 100) / 100;
+}
+
 export function getTtlDaysForMemory(memory, config) {
   const defaultDays = config?.memory?.ttl?.defaultDays || 90;
   const factDays = config?.memory?.ttl?.factDays || 180;
   const lowPriorityDays = config?.memory?.ttl?.lowPriorityDays || 30;
   const sensitiveDays = config?.memory?.ttl?.sensitiveDays || 365;
+  const utilityScore = calculateMemoryUtilityScore(memory);
 
   if (memory.sensitivity === "sensitive") {
     return Math.max(defaultDays, sensitiveDays);
@@ -202,7 +223,8 @@ export function getTtlDaysForMemory(memory, config) {
   if (memory.type === "fact") {
     return factDays;
   }
-  return defaultDays;
+  const utilityDays = Math.round(defaultDays * (1 + (utilityScore - 0.5) * 0.5));
+  return Math.min(180, Math.max(30, utilityDays));
 }
 
 function normalizeContent(content) {

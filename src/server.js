@@ -203,6 +203,23 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         const graphData = await loadGraph();
         const result = simulateDualRouteRetrieve(query, memories, graphData, filters);
         sendJson(res, 200, result);
+      } else if (path === "/api/memory/utility" && method === "GET") {
+        const defaultConfig = loadConfig();
+        const scope = url.searchParams.get("scope") || "default";
+        const limit = Number(url.searchParams.get("limit") || 500);
+        const memories = await storage.listMemories(limit, scope, defaultConfig, { excludeNoise: true });
+        const { calculateMemoryUtilityScore, getTtlDaysForMemory } = await import("./storage/local.js");
+        sendJson(res, 200, memories.map((m) => ({
+          id: m.id,
+          content: m.content,
+          type: m.type,
+          confidence: m.confidence,
+          tags: m.tags,
+          priority: m.priority,
+          sensitivity: m.sensitivity,
+          utilityScore: calculateMemoryUtilityScore(m),
+          ttlDays: getTtlDaysForMemory(m, defaultConfig),
+        })));
       } else if (path === "/api/profile" && method === "GET") {
         sendJson(res, 200, await buildProfile({ memoryConfig, storage }));
       } else if (path === "/api/dream" && method === "POST") {
