@@ -334,6 +334,7 @@
       <button class="tab active" data-view="memories">Memories</button>
       <button class="tab" data-view="knowledge">Knowledge</button>
       <button class="tab" data-view="events">Event Summaries</button>
+      <button class="tab" data-view="organize">Organize</button>
       <button class="tab" data-view="settings">Settings</button>
     </div>
 
@@ -402,6 +403,36 @@
       </div>
 
       <div id="memoryList" class="grid"></div>
+    </div>
+
+    <div id="organizeView" style="display: none;">
+      <h2 class="section-title">HybridTagGraph Organization</h2>
+      <div class="controls">
+        <button id="organizeGraphButton" class="secondary">Build Graph</button>
+      </div>
+      <div id="graphStats" class="meta" style="margin-bottom:16px;"></div>
+      <div class="form-card">
+        <h3 class="section-title">Dual-Route Search</h3>
+        <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:end;">
+          <div class="field" style="flex:1 1 300px;">
+            <label for="organizeQuery">Query</label>
+            <input id="organizeQuery" type="text" placeholder="search query..." />
+          </div>
+          <select id="organizeFilterType">
+            <option value="all">All</option>
+            <option value="system1">System-1 (similarity/tags)</option>
+            <option value="system2">System-2 (hierarchy)</option>
+          </select>
+          <select id="organizeSimilarity">
+            <option value="0.3">≥ 0.3</option>
+            <option value="0.4">≥ 0.4</option>
+            <option value="0.5">≥ 0.5</option>
+            <option value="0.7">≥ 0.7</option>
+          </select>
+          <button id="retrieveButton" class="secondary">Retrieve</button>
+        </div>
+      </div>
+      <div id="organizeResults" class="grid"></div>
     </div>
 
     <div id="knowledgeView" style="display: none;">
@@ -1005,6 +1036,83 @@
 
     document.getElementById("loadConfigBtn").addEventListener("click", loadSettings);
     document.getElementById("saveConfigBtn").addEventListener("click", saveSettings);
+
+    const graphStats = document.getElementById("graphStats");
+    const organizeResults = document.getElementById("organizeResults");
+    async function loadOrganizeGraph() {
+      try {
+        const result = await request("/memory/organize", {
+          method: "POST",
+          body: JSON.stringify({ scope: document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value }),
+        });
+        graphStats.textContent = `Graph: ${result.baseNodes.length} base nodes, ${result.summaryNodes.length} summary nodes, ${result.categoryNodes.length} category nodes, ${result.edges.length} edges.`;
+        renderOrganizeGraph(result);
+      } catch (e) {
+        graphStats.textContent = "Error: " + e.message;
+      }
+    }
+    function renderOrganizeGraph(data) {
+      organizeResults.innerHTML = "";
+      const baseCard = document.createElement("div");
+      baseCard.className = "card";
+      baseCard.innerHTML = `<h3>Base Graph Nodes</h3><div class="card-content">${data.baseNodes.map((n) => n.id + " (" + (n.tags || []).join(", ") + ")").join("\n")}</div>`;
+      organizeResults.appendChild(baseCard);
+      if (data.summaryNodes.length) {
+        const summaryCard = document.createElement("div");
+        summaryCard.className = "card";
+        summaryCard.innerHTML = `<h3>Summary Nodes</h3><div class="card-content">${data.summaryNodes.map((s) => s.id + " -> " + s.baseIds.join(", ")).join("\n")}</div>`;
+        organizeResults.appendChild(summaryCard);
+      }
+      if (data.categoryNodes.length) {
+        const catCard = document.createElement("div");
+        catCard.className = "card";
+        catCard.innerHTML = `<h3>Category Nodes</h3><div class="card-content">${data.categoryNodes.map((c) => c.id + " (" + c.category + ") count=" + c.count).join("\n")}</div>`;
+        organizeResults.appendChild(catCard);
+      }
+    }
+    async function runDualRouteRetrieve() {
+      organizeResults.innerHTML = "";
+      const query = document.getElementById("organizeQuery").value;
+      const filterType = document.getElementById("organizeFilterType").value;
+      const sim = document.getElementById("organizeSimilarity").value;
+      const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
+      try {
+        const result = await request("/memory/retrieve", {
+          method: "POST",
+          body: JSON.stringify({ query, scope, filters: { similarityThreshold: Number(sim) } }),
+        });
+        const system1 = result.system1Results || [];
+        const system2 = result.system2Results || [];
+        if (filterType === "all" || filterType === "system1") {
+          system1.forEach((m, i) => createMemoryCard(m, "system1", i + 1));
+        }
+        if (filterType === "all" || filterType === "system2") {
+          system2.forEach((m, i) => createMemoryCard(m, "system2", i + 1));
+        }
+        if (system1.length === 0 && system2.length === 0) {
+          organizeResults.innerHTML = `<div class="empty">No results found for query: ${escapeHtml(query)}</div>`;
+        }
+      } catch (e) {
+        organizeResults.innerHTML = `<div class="empty">Error: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+    function createMemoryCard(memory, route, index) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <h3>[${route}] #${index} ${escapeHtml(memory.id)}</h3>
+        <div class="card-content">${escapeHtml(memory.content)}</div>
+        <div class="meta">
+          <span class="pill">scope: ${escapeHtml(memory.scope || "default")}</span>
+          <span class="pill">type: ${escapeHtml(memory.type || "fact")}</span>
+          <span class="pill">tags: ${escapeHtml((memory.tags || []).join(", ") || "none")}</span>
+        </div>
+        <div class="time-row">created: ${formatLocalTime(memory.createdAt)}</div>
+      `;
+      organizeResults.appendChild(card);
+    }
+    document.getElementById("organizeGraphButton").addEventListener("click", loadOrganizeGraph);
+    document.getElementById("retrieveButton").addEventListener("click", runDualRouteRetrieve);
     document.getElementById("optimizeMemoryButton").addEventListener("click", async () => {
       const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
       if (!confirm("Optimize memories in scope \"" + scope + "\"? This will merge duplicate content and delete redundant entries.")) return;

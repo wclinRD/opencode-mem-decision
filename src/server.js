@@ -10,6 +10,9 @@ import { runDreaming } from "./dreaming.js";
 import { summarizeRecentEvents } from "./eventLog.js";
 import { loadConfig } from "./config.js";
 import { skillsStorage } from "./skills.js";
+import { saveGraph, loadGraph } from "./storage/graph.js";
+import { buildHierarchicalGraph } from "./organize.js";
+import { simulateDualRouteRetrieve } from "./retrieval.js";
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "opencode", "plugins", "opencode-mem-decision", "config.json");
 
@@ -173,6 +176,22 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         const body = await parseBody(req);
         const scope = body.scope || "default";
         const result = await storage.optimizeMemories(scope);
+        sendJson(res, 200, result);
+      } else if (path === "/api/memory/organize" && method === "POST") {
+        const body = await parseBody(req);
+        const scope = body.scope || "default";
+        const memories = await storage.searchMemories("", { scope, includeExpired: true });
+        const graphData = buildHierarchicalGraph(memories, body.config || {});
+        await saveGraph(graphData);
+        sendJson(res, 200, graphData);
+      } else if (path === "/api/memory/retrieve" && method === "POST") {
+        const body = await parseBody(req);
+        const query = body.query || "";
+        const scope = body.scope || "default";
+        const filters = body.filters || {};
+        const memories = await storage.searchMemories("", { scope, includeExpired: true });
+        const graphData = await loadGraph();
+        const result = simulateDualRouteRetrieve(query, memories, graphData, filters);
         sendJson(res, 200, result);
       } else if (path === "/api/profile" && method === "GET") {
         sendJson(res, 200, await buildProfile({ memoryConfig, storage }));
