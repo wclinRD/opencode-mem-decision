@@ -76,6 +76,13 @@ export function projectStoragePath(projectName) {
   return path.join(getStorageDir(), PROJECTS_DIR, sanitized, "memories.db.json");
 }
 
+function attachProjectName(memory) {
+  if (memory && memory.scope && memory.scope.startsWith("project:")) {
+    return { ...memory, projectName: memory.scope.slice("project:".length) };
+  }
+  return memory;
+}
+
 async function ensureDir(dir) {
   try {
     await fs.mkdir(dir, { recursive: true });
@@ -259,7 +266,7 @@ export async function searchMemories(query, filters = {}) {
         .map((memory) => ({ memory, similarity: cosineSimilarity(memory.embedding, queryVec) }))
         .filter((entry) => entry.similarity >= similarityThreshold)
         .sort((a, b) => b.similarity - a.similarity)
-        .map((entry) => entry.memory);
+        .map((entry) => attachProjectName(entry.memory));
     } catch (e) {
       console.error(`[opencode-mem] vector search failed: ${e.message}`);
       // fallback to string search below
@@ -271,7 +278,8 @@ export async function searchMemories(query, filters = {}) {
   if (!queryTokens.length) {
     return scoped
       .sort((a, b) => Number(b.priority) - Number(a.priority) || new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 50);
+      .slice(0, 50)
+      .map(attachProjectName);
   }
 
   return scoped
@@ -282,14 +290,14 @@ export async function searchMemories(query, filters = {}) {
     })
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || new Date(b.createdAt) - new Date(a.createdAt))
-    .map((entry) => entry.memory);
+    .map((entry) => attachProjectName(entry.memory));
 }
 
 export async function listAllMemories(scope = "default") {
   const isProjectScope = scope && scope.startsWith("project:");
   const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
-  return db.memories || [];
+  return (db.memories || []).map(attachProjectName);
 }
 
 export async function listMemories(limit = 50, scope = "default", ttlConfig = {}) {
@@ -304,7 +312,8 @@ export async function listMemories(limit = 50, scope = "default", ttlConfig = {}
       return memory.createdAt >= cutoff;
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, limit);
+    .slice(0, limit)
+    .map(attachProjectName);
 }
 
 export async function getMemory(id) {
