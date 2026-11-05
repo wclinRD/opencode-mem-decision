@@ -12,6 +12,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@opencode/plugin": "^2.2.5"
+    "@opencode/plugin": "2.2.0"
   }
 }
