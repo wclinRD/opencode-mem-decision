@@ -25,12 +25,21 @@ export function dynamicBudget(fillRatio) {
   return { enabled: true, maxChunks: 5, chunkLimit: 600 };
 }
 
-export async function injectMemories({ sessionData, memoryConfig, storage, contextWindowSize }) {
+export async function injectMemories({
+  sessionData,
+  memoryConfig,
+  storage,
+  contextWindowSize,
+  activeProject,
+}) {
   if (!memoryConfig.chatMessage?.enabled) return [];
 
   const recallMode = memoryConfig.chatMessage.recall || "relevant";
   const maxMemories = memoryConfig.chatMessage.maxMemories || 3;
   const recallScope = memoryConfig.chatMessage.recallScope || "default";
+
+  // Resolve actual project scope for the active project before any query
+  const effectiveScope = activeProject?.projectName ? `project:${activeProject.projectName}` : recallScope;
   const excludeCurrentSession = memoryConfig.chatMessage.excludeCurrentSession !== false;
 
   let candidates = [];
@@ -38,18 +47,18 @@ export async function injectMemories({ sessionData, memoryConfig, storage, conte
   if (recallMode === "relevant" || recallMode === "both") {
     const query = sessionData?.latestMessage || sessionData?.messages?.slice(-1)?.[0]?.content || "";
     const defaultConfig = loadConfig();
-    const filters = { scope: recallScope, includeExpired: false };
+    const filters = { scope: effectiveScope, includeExpired: false };
     candidates = await searchMemories(query, filters);
 
     // Default recall must still do something when nothing is relevant.
     if (recallMode === "relevant" && candidates.length === 0) {
-      candidates = await listMemories(maxMemories * 2, recallScope, defaultConfig);
+      candidates = await listMemories(maxMemories * 2, effectiveScope, defaultConfig);
     }
   }
 
   if (recallMode === "recent" || (recallMode === "both" && candidates.length < maxMemories)) {
     const defaultConfig = loadConfig();
-    const recent = await listMemories(maxMemories * 2, recallScope, defaultConfig);
+    const recent = await listMemories(maxMemories * 2, effectiveScope, defaultConfig);
     const relevantIds = new Set(candidates.map((m) => m.id));
     const recentUnique = recent.filter((m) => !relevantIds.has(m.id));
     candidates = [...candidates, ...recentUnique].slice(0, maxMemories);

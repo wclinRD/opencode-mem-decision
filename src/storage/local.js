@@ -54,11 +54,26 @@ const HOME_DIR = process.env.HOME || os.homedir() || "~";
 const MEMORIES_FILE = "memories.db.json";
 const KNOWLEDGE_FILE = "knowledge.db.json";
 const TRASH_FILE = "trash.db.json";
+const PROJECTS_DIR = "projects";
 
 export function getStorageDir() {
   const override = process.env.OPENCODE_MEM_DIR;
   if (override) return path.resolve(override);
   return path.join(HOME_DIR, ".opencode-memory");
+}
+
+function sanitizeProjectId(projectName) {
+  return String(projectName)
+    .toLowerCase()
+    .replace(/[^a-z0-9_.-]/g, "-")
+    .replace(/[-_]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64) || "global";
+}
+
+export function projectStoragePath(projectName) {
+  const sanitized = sanitizeProjectId(projectName);
+  return path.join(getStorageDir(), PROJECTS_DIR, sanitized, "memories.db.json");
 }
 
 async function ensureDir(dir) {
@@ -95,7 +110,8 @@ async function writeJsonFile(filePath, data) {
 }
 
 export async function addMemory(content, scope = "project", sessionId, metadata = {}, duplicateConfig = null) {
-  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   await ensureDir(path.dirname(filePath));
   const db = await readJsonFile(filePath);
 
@@ -198,11 +214,12 @@ export async function cleanupExpiredMemories(config) {
 }
 
 export async function searchMemories(query, filters = {}) {
-  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+  const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
+  const isProjectScope = effectiveScope && effectiveScope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(effectiveScope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
   const vectorSearch = filters.vectorSearch === true;
-  const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
   const typeFilter = filters.type;
   const confidenceFilter = filters.confidence;
   const priorityFilter = filters.priority;
@@ -268,14 +285,16 @@ export async function searchMemories(query, filters = {}) {
     .map((entry) => entry.memory);
 }
 
-export async function listAllMemories() {
-  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+export async function listAllMemories(scope = "default") {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   return db.memories || [];
 }
 
 export async function listMemories(limit = 50, scope = "default", ttlConfig = {}) {
-  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
 
   return db.memories
@@ -407,19 +426,22 @@ export async function updateMemory(id, updates) {
   return memory;
 }
 
-export async function exportMemories(outputPath) {
-  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+export async function exportMemories(outputPath, scope = "default") {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   await fs.writeFile(outputPath, JSON.stringify(db.memories, null, 2), "utf-8");
   return outputPath;
 }
 
-export async function importMemories(inputPath) {
-  const filePath = path.join(getStorageDir(), MEMORIES_FILE);
+export async function importMemories(inputPath, scope = "default") {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const targetFile = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const data = JSON.parse(await fs.readFile(inputPath, "utf-8"));
-  const db = await readJsonFile(filePath);
+  await ensureDir(path.dirname(targetFile));
+  const db = await readJsonFile(targetFile);
   db.memories.push(...data);
-  await writeJsonFile(filePath, db);
+  await writeJsonFile(targetFile, db);
   return db.memories.length;
 }
 
@@ -427,6 +449,24 @@ export async function listShards() {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
   const shards = new Set(db.memories.map((m) => m.scope || "default"));
+  // Add project shards if they exist
+  const projectsDir = path.join(getStorageDir(), PROJECTS_DIR);
+  try {
+    const projects = await fs.readdir(projectsDir);
+    for (const project of projects) {
+      const projectDbPath = projectStoragePath(project);
+      try {
+        const projectDb = await readJsonFile(projectDbPath);
+        for (const m of projectDb.memories || []) {
+          shards.add(m.scope || "default");
+        }
+      } catch (e) {
+        // ignore unreadable project files
+      }
+    }
+  } catch (e) {
+    // projects dir does not exist
+  }
   return Array.from(shards);
 }
 

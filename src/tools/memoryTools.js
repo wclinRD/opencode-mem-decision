@@ -1,6 +1,6 @@
 import { runDreaming, restoreTrashEntry } from "../dreaming.js";
 
-export function registerMemoryTools({ tools, storage, memoryConfig }) {
+export function registerMemoryTools({ tools, storage, memoryConfig, activeProject }) {
   tools.define("memory", {
     description: "Manage cross-session memories",
     modes: {
@@ -9,9 +9,11 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
         parameters: {
           content: { type: "string", description: "Memory content" },
           scope: { type: "string", description: "Memory scope", default: "project" },
+          project: { type: "string", description: "Project name to scope memory to" },
         },
-        handler: async ({ content, scope = "project" }) => {
-          return storage.addMemory(content, scope);
+        handler: async ({ content, scope = "project", project }) => {
+          const effectiveScope = project ? `project:${project}` : scope;
+          return storage.addMemory(content, effectiveScope);
         },
       },
       search: {
@@ -19,12 +21,14 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
         parameters: {
           query: { type: "string", description: "Search query" },
           scope: { type: "string", description: "Memory scope", default: "default" },
+          project: { type: "string", description: "Project name to scope search to" },
           ttlDays: { type: "number", description: "Optional TTL days filter; if omitted, use memory type TTL" },
           confidenceFilter: { type: "number", description: "Optional minimum confidence threshold" },
           includeExpired: { type: "boolean", description: "Include expired memories despite TTL", default: false },
         },
-        handler: async ({ query, scope = "default", ttlDays, confidenceFilter, includeExpired }) => {
-          return storage.searchMemories(query, { scope, ttlDays, confidenceFilter, includeExpired });
+        handler: async ({ query, scope = "default", project, ttlDays, confidenceFilter, includeExpired }) => {
+          const effectiveScope = project ? `project:${project}` : scope;
+          return storage.searchMemories(query, { scope: effectiveScope, ttlDays, confidenceFilter, includeExpired });
         },
       },
       list: {
@@ -32,9 +36,11 @@ export function registerMemoryTools({ tools, storage, memoryConfig }) {
         parameters: {
           limit: { type: "number", description: "Max results", default: 50 },
           scope: { type: "string", description: "Memory scope", default: "default" },
+          project: { type: "string", description: "Project name to scope list to" },
         },
-        handler: async ({ limit = 50, scope = "default" }) => {
-          return storage.listMemories(limit, scope, memoryConfig);
+        handler: async ({ limit = 50, scope = "default", project }) => {
+          const effectiveScope = project ? `project:${project}` : scope;
+          return storage.listMemories(limit, effectiveScope, memoryConfig);
         },
       },
       profile: {

@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import { listMemories, updateMemory, softDeleteMemory, addMemory, getStorageDir, cleanupTrash } from "./storage/local.js";
+import { listMemories, updateMemory, softDeleteMemory, addMemory, getStorageDir, cleanupTrash, projectStoragePath } from "./storage/local.js";
 import { calculateSimilarity } from "./capture.js";
 import { redactCredentials } from "./security.js";
 import { loadConfig } from "./config.js";
@@ -28,12 +28,13 @@ async function writeTrash(entries) {
   await fs.writeFile(filePath, JSON.stringify({ entries }, null, 2), "utf-8");
 }
 
-export async function runDreaming({ memoryConfig, storage }) {
+export async function runDreaming({ memoryConfig, storage, activeProject }) {
   if (!memoryConfig.dreaming?.enabled) return { action: "skipped", reason: "dreaming disabled" };
 
   const relatedThreshold = memoryConfig.dreaming.relatedThreshold || 0.75;
   const defaultConfig = loadConfig();
-  const memories = await listMemories(1000, "default", defaultConfig);
+  const effectiveScope = activeProject?.projectName ? `project:${activeProject.projectName}` : "default";
+  const memories = await listMemories(1000, effectiveScope, defaultConfig);
   const trash = await readTrash();
   let actions = [];
 
@@ -78,7 +79,7 @@ async function moveToTrash(id, content, entries) {
   await softDeleteMemory(id);
 }
 
-export async function restoreTrashEntry(id) {
+export async function restoreTrashEntry(id, activeProject = null) {
   const filePath = trashPath();
   try {
     const data = await fs.readFile(filePath, "utf-8");
@@ -87,7 +88,8 @@ export async function restoreTrashEntry(id) {
     if (!entry) return { error: "not found" };
     trash.entries = trash.entries.filter((e) => e.id !== id);
     await fs.writeFile(filePath, JSON.stringify(trash, null, 2), "utf-8");
-    await addMemory(entry.content, "project");
+    const scope = activeProject?.projectName ? `project:${activeProject.projectName}` : "project";
+    await addMemory(entry.content, scope);
     return { restored: true };
   } catch (e) {
     return { error: e.message };

@@ -6,7 +6,7 @@ const DEFAULT_CONFIG = {
     enabled: true,
     injectOn: "first",
     recall: "relevant",
-    recallScope: "default",
+    recallScope: "project:<current>",
     similarityThreshold: 0.75,
     maxMemories: 3,
     excludeCurrentSession: true,

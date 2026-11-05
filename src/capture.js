@@ -130,7 +130,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   const projectTag = projectShared ? [projectShared.projectName] : [];
   const memory = await storage.addMemory(
     redactCredentials(filtered),
-    projectShared ? "shared-project" : "project",
+    projectShared ? "project:" + projectShared.projectName : "project",
     sessionData?.id,
     {
       type: classified.type,
@@ -142,7 +142,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     duplicateConfig
   );
 
-  const existingMemories = await storage.listMemories(1000, "default", memoryConfig);
+  const existingMemories = await storage.listMemories(1000, projectShared ? `project:${projectShared.projectName}` : "default", memoryConfig);
   const existingIds = new Set(existingMemories.map((m) => m.id));
 
   if (!memory) {
@@ -164,7 +164,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
           const summaryText = `Auto-extracted summary:\n${summary}\nTopics: ${topics.join(", ")}`;
           await storage.addMemory(
             summaryText,
-            projectShared ? "shared-project" : "project",
+            projectShared ? "project:" + projectShared.projectName : "project",
             sessionData?.id,
             { type: "summary", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
             duplicateConfig
@@ -173,7 +173,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
         if (decisions.length > 0) {
           await storage.addMemory(
             `Auto-extracted decisions:\n${decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")}`,
-            projectShared ? "shared-project" : "project",
+            projectShared ? "project:" + projectShared.projectName : "project",
             sessionData?.id,
             { type: "decision", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
             duplicateConfig
@@ -182,7 +182,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
         if (codeSnippets.length > 0) {
           await storage.addMemory(
             `Auto-extracted code snippets:\n${codeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
-            projectShared ? "shared-project" : "project",
+            projectShared ? "project:" + projectShared.projectName : "project",
             sessionData?.id,
             { type: "code", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
             duplicateConfig
@@ -198,7 +198,7 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   if (summary && !wasUpdate) {
     await storage.addMemory(
       `Session Summary: ${summary.summary}\nRelated memory IDs: ${summary.related_memory_ids.join(",")}`,
-      "project",
+      projectShared ? `project:${projectShared.projectName}` : "project",
       null,
       { type: "summary", confidence: 0.8, sensitivity: "normal", tags: ["auto-summary"] },
       duplicateConfig

@@ -11,6 +11,7 @@ import { EmbeddingService } from "./embedding.js";
 import { ExtractionService } from "./extraction.js";
 import { setEmbeddingService } from "./storage/local.js";
 import { skillsStorage } from "./skills.js";
+import { resolveProjectShared } from "./projectShared.js";
 import path from "path";
 import os from "os";
 
@@ -33,6 +34,10 @@ const MEMORY_TOOL_INPUT = {
       type: "string",
       enum: MEMORY_MODES,
       description: "Operation to perform.",
+    },
+    project: {
+      type: "string",
+      description: "Project name to scope memory operations to; if omitted, defaults to current project or global.",
     },
     content: {
       type: "string",
@@ -72,9 +77,16 @@ const MEMORY_TOOL_INPUT = {
   additionalProperties: false,
 };
 
-async function runMemoryMode(args, { storage, memoryConfig }) {
+async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
   const mode = args.mode;
   if (!mode) throw new Error("mode is required");
+
+  // Derive project scope if a project was explicitly requested
+  const projectScope = args.project
+    ? `project:${args.project}`
+    : activeProject?.projectName
+      ? `project:${activeProject.projectName}`
+      : null;
 
   // Memory modes
   if (mode.startsWith("skill-")) {
@@ -97,7 +109,8 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
   if (mode === "add") {
     const classified = classifyMemory(args.content);
     const duplicateConfig = memoryConfig.duplicateDetection || { enabled: true, similarityThreshold: 0.75, updateOnMatch: true };
-    return storage.addMemory(args.content, args.scope || "project", null, {
+    const effectiveScope = projectScope || (args.scope || "project");
+    return storage.addMemory(args.content, effectiveScope, null, {
       type: classified.type,
       confidence: classified.confidence,
       sensitive: classified.sensitive,
@@ -105,6 +118,9 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
   }
   if (mode === "update") {
     const updates = { ...(args.content && { content: args.content }), ...(args.scope && { scope: args.scope }) };
+    if (args.project) {
+      updates.scope = `project:${args.project}`;
+    }
     if (args.metadata) {
       if (args.metadata.type !== undefined) updates.type = args.metadata.type;
       if (args.metadata.confidence !== undefined) updates.confidence = args.metadata.confidence;
@@ -114,16 +130,16 @@ async function runMemoryMode(args, { storage, memoryConfig }) {
     }
     return storage.updateMemory(args.id, updates);
   }
-  if (mode === "search") return storage.searchMemories(args.query, { scope: args.scope || "default", includeExpired: args.includeExpired !== true, ttlDays: args.ttlDays });
-  if (mode === "list") return storage.listMemories(args.limit || 50, args.scope || "default", memoryConfig);
+  if (mode === "search") return storage.searchMemories(args.query, { scope: projectScope || (args.scope || "default"), includeExpired: args.includeExpired !== true, ttlDays: args.ttlDays });
+  if (mode === "list") return storage.listMemories(args.limit || 50, projectScope || (args.scope || "default"), memoryConfig);
   if (mode === "profile") return buildProfile({ storage, memoryConfig });
   if (mode === "forget") return storage.deleteMemory(args.id);
-  if (mode === "export") return storage.exportMemories(args.outputPath);
-  if (mode === "import") return storage.importMemories(args.inputPath);
+  if (mode === "export") return storage.exportMemories(args.outputPath, projectScope || (args.scope || "default"));
+  if (mode === "import") return storage.importMemories(args.inputPath, projectScope || (args.scope || "default"));
   if (mode === "list-shards") return storage.listShards();
   if (mode === "migrate") return storage.migrate(args.fromPath);
-  if (mode === "dream") return runDreaming({ memoryConfig, storage });
-  if (mode === "restore-trash") return (await import("./dreaming.js")).restoreTrashEntry(args.id);
+  if (mode === "dream") return runDreaming({ memoryConfig, storage, activeProject });
+  if (mode === "restore-trash") return (await import("./dreaming.js")).restoreTrashEntry(args.id, activeProject);
 
   throw new Error(`Unknown memory mode: ${mode}`);
 }
@@ -192,13 +208,21 @@ export default Plugin.define({
       }
     }
 
+    // Resolve active project at plugin setup time.
+    let activeProject = null;
+    try {
+      activeProject = await resolveProjectShared({ memoryConfig, cwd: process.cwd() });
+    } catch (error) {
+      console.error(`[opencode-mem-decision] failed to resolve project marker: ${error.message}`);
+    }
+
     await ctx.tool.transform((editor) => {
       editor.add({
         name: "memory",
         description: "Manage cross-session memories and knowledge",
         input: MEMORY_TOOL_INPUT,
         execute: async (input) =>
-          toToolResult(await runMemoryMode(input || {}, { storage, memoryConfig })),
+          toToolResult(await runMemoryMode(input || {}, { storage, memoryConfig, activeProject })),
       });
     });
 
@@ -225,6 +249,7 @@ export default Plugin.define({
           memoryConfig,
           storage,
           contextWindowSize: memoryConfig.chatMessage?.contextWindowSize || 128000,
+          activeProject,
         });
         const fillRatio = calculateFillRatio(event.prompt.text, memoryConfig.chatMessage?.contextWindowSize || 128000);
         const block = formatInjectedPrompt(memories, fillRatio);
