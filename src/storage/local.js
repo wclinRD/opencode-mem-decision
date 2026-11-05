@@ -274,7 +274,7 @@ export async function digestMemories(scope = "default", threshold = 0.65) {
   const db = await readJsonFile(filePath);
 
   const memories = (db.memories || []).filter((m) => !m.isExpired && (m.confidence || 0) >= 0.3);
-  const grouped = organizeMemoriesWithLLM(null, memories);
+  const grouped = await organizeMemoriesWithLLM(null, memories);
   const mergedMemories = [];
   const removedIds = [];
   let mergedGroupCount = 0;
