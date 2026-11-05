@@ -18,7 +18,7 @@
 - [x] System-1 Similarity Search: tag-filtered keyword/vector lookup
 - [x] System-2 Global Selection: traverse Category/Principle nodes via tag chains
 - [x] Routing logic based on query type (fact vs global aggregation)
-- [ ] Benchmark dual-route vs single flat search accuracy
+- [x] Benchmark dual-route vs single flat search accuracy on synthetic corpus
 - [x] Ensure backward compatibility with existing `search` and `list`
 
 ## Phase 4: Layered Storage Implementation
@@ -50,8 +50,9 @@
 ## Current Status
 - Phase 1 committed: `c8e0637`
 - Phase 2 committed: `bd73e05`
-- Phase 3 core routing integrated into retrieval flow.
+- Phase 3 core routing integrated and benchmarking added: `5ddd839`, `b077d6a`.
 - Phase 4 committed: `fe50a97` layered storage schemas and dual-route integration.
 - Phase 5 committed: `79909ae` capture flow optimization with summarization and sensitive filtering.
 - Phase 6 committed: `859ed87` metadata weighting, cut-off handling, and injection audit.
-- All planned phases completed; benchmarking and integration review pending.
+- Phase 7 handover summary committed: `60a2bbd`.
+- All 107 tests pass (including dual-route accuracy benchmark); working tree clean.
