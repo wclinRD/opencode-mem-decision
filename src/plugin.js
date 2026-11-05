@@ -74,6 +74,10 @@ const MEMORY_TOOL_INPUT = {
       type: "string",
       description: "Legacy database path (migrate).",
     },
+    buildGraph: {
+      type: "boolean",
+      description: "Build or update hierarchical graph after add memory.",
+    },
   },
   required: ["mode"],
   additionalProperties: false,
@@ -112,6 +116,13 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
     const classified = classifyMemory(args.content);
     const duplicateConfig = memoryConfig.duplicateDetection || { enabled: true, similarityThreshold: 0.75, updateOnMatch: true };
     const effectiveScope = projectScope || (args.scope || "project");
+    if (args.buildGraph === true) {
+      return storage.addMemoryLayered(args.content, effectiveScope, null, {
+        type: classified.type,
+        confidence: classified.confidence,
+        sensitive: classified.sensitive,
+      }, duplicateConfig, { buildGraph: true });
+    }
     return storage.addMemory(args.content, effectiveScope, null, {
       type: classified.type,
       confidence: classified.confidence,
@@ -150,8 +161,15 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
   }
   if (mode === "retrieve") {
     const effectiveScope = activeProject?.projectName ? `project:${activeProject.projectName}` : (args.scope || "default");
-    const memories = await storage.searchMemories(args.query || "", { scope: effectiveScope, includeExpired: true });
+    const baseMemories = await storage.searchMemories(args.query || "", { scope: effectiveScope, includeExpired: true });
     const graphData = await storage.buildGraphAndPersist(effectiveScope);
+    const layeredFilter = args.filters?.layered || args.filters?.useGraph ? { layered: true, useGraph: true } : null;
+    let memories;
+    if (layeredFilter) {
+      memories = await storage.searchMemoriesLayered(args.query || "", { ...layeredFilter, scope: effectiveScope, includeExpired: true });
+    } else {
+      memories = baseMemories;
+    }
     return simulateDualRouteRetrieve(args.query || "", memories, graphData, args.filters || {});
   }
 

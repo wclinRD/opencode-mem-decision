@@ -565,6 +565,110 @@ export async function buildGraphAndPersist(scope = "default") {
   return graphData;
 }
 
+export async function addSummaryNode(node) {
+  const graphData = await loadGraph();
+  if (!graphData) return null;
+  if (!graphData.summaryNodes) graphData.summaryNodes = [];
+  graphData.summaryNodes.push(node);
+  await saveGraph(graphData);
+  return node;
+}
+
+export async function addCategoryNode(node) {
+  const graphData = await loadGraph();
+  if (!graphData) return null;
+  if (!graphData.categoryNodes) graphData.categoryNodes = [];
+  graphData.categoryNodes.push(node);
+  await saveGraph(graphData);
+  return node;
+}
+
+export async function addGraphEdge(edge) {
+  const graphData = await loadGraph();
+  if (!graphData) return null;
+  if (!graphData.edges) graphData.edges = [];
+  graphData.edges.push(edge);
+  await saveGraph(graphData);
+  return edge;
+}
+
+export async function updateGraphEdges(edges) {
+  const graphData = await loadGraph();
+  if (!graphData) return null;
+  graphData.edges = edges;
+  await saveGraph(graphData);
+  return edges;
+}
+
+export async function getSummaryNodes(scope = "default") {
+  const graphData = await loadGraph();
+  if (!graphData) return [];
+  if (scope === "default") return (graphData.summaryNodes || []).slice(0);
+  const baseNodes = (graphData.baseNodes || []).filter(b => b.scope === scope);
+  const baseIds = new Set(baseNodes.map(b => b.id));
+  return (graphData.summaryNodes || []).filter(s => baseIds.has(s.baseId) || s.baseIds.some(id => baseIds.has(id)));
+}
+
+export async function getCategoryNodes(scope = "default") {
+  const graphData = await loadGraph();
+  if (!graphData) return [];
+  if (scope === "default") return (graphData.categoryNodes || []).slice(0);
+  const baseNodes = (graphData.baseNodes || []).filter(b => b.scope === scope);
+  const baseIds = new Set(baseNodes.map(b => b.id));
+  return (graphData.categoryNodes || []).filter(c => baseIds.has(c.baseId) || c.memoryIds.some(id => baseIds.has(id)));
+}
+
+export async function getGraphEdges(scope = "default") {
+  const graphData = await loadGraph();
+  if (!graphData) return [];
+  if (scope === "default") return (graphData.edges || []).slice(0);
+  const baseNodes = (graphData.baseNodes || []).filter(b => b.scope === scope);
+  const baseIds = new Set(baseNodes.map(b => b.id));
+  return (graphData.edges || []).filter(e => [e.from, e.to].some(id => baseIds.has(id)));
+}
+
+export async function addMemoryLayered(content, scope = "default", sessionId, metadata = {}, duplicateConfig = null, options = {}) {
+  const memory = await addMemory(content, scope, sessionId, metadata, duplicateConfig);
+  if (options?.buildGraph !== false) {
+    try {
+      await buildGraphAndPersist(scope);
+    } catch (e) {
+      console.warn(`[opencode-mem] graph build after memory add failed: ${e.message}`);
+    }
+  }
+  return memory;
+}
+
+export async function migrateFlatToLayered(scope = "default") {
+  return buildGraphAndPersist(scope);
+}
+
+export async function searchMemoriesLayered(query, filters = {}) {
+  const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
+  const graphData = await loadGraph();
+  if (!graphData) {
+    return searchMemories(query, filters);
+  }
+  const baseResults = await searchMemories(query, filters);
+  if (!filters.layered && !filters.useGraph) return baseResults;
+  const baseNodes = (graphData.baseNodes || []).filter(b => b.scope === effectiveScope || effectiveScope === "default");
+  const baseIdSet = new Set(baseNodes.map(b => b.id));
+  const categoryNodes = (graphData.categoryNodes || []).filter(c => c.memoryIds.some(id => baseIdSet.has(id)));
+  const system2Ids = new Set();
+  for (const cat of categoryNodes) {
+    for (const id of cat.memoryIds) {
+      if (baseIdSet.has(id)) system2Ids.add(id);
+    }
+  }
+  const system2Results = baseNodes.filter(b => system2Ids.has(b.id)).map(b => ({ id: b.id, content: b.content, tags: b.tags, scope: b.scope, createdAt: b.createdAt, updatedAt: b.updatedAt }));
+  const merged = new Map();
+  for (const m of baseResults) merged.set(m.id, m);
+  for (const m of system2Results) {
+    if (!merged.has(m.id)) merged.set(m.id, m);
+  }
+  return Array.from(merged.values());
+}
+
 export async function listGraphMetrics() {
   const graphData = await loadGraph();
   if (!graphData) return { baseNodes: 0, summaryNodes: 0, categoryNodes: 0, edges: 0 };
@@ -647,4 +751,14 @@ export const localStorage = {
   optimizeMemories,
   buildGraphAndPersist,
   listGraphMetrics,
+  addSummaryNode,
+  addCategoryNode,
+  addGraphEdge,
+  updateGraphEdges,
+  getSummaryNodes,
+  getCategoryNodes,
+  getGraphEdges,
+  addMemoryLayered,
+  migrateFlatToLayered,
+  searchMemoriesLayered,
 };

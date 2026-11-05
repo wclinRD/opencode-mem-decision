@@ -357,3 +357,54 @@ test("storage - encryption stores and decrypts data", async () => {
     setEmbeddingService(null);
   }
 });
+
+test("storage - addMemoryLayered builds graph after insertion", async () => {
+  const memory = await localStorage.addMemoryLayered("TypeScript and Go project memory", "project", null, { type: "fact" }, null, { buildGraph: true });
+  assert.ok(memory.id.startsWith("mem_"));
+  const graphData = await storageBuildGraphAndPersistFromModule("project");
+  assert.ok(graphData.baseNodes.length >= 1);
+});
+
+test("storage - getSummaryNodes/getCategoryNodes/getGraphEdges", async () => {
+  await localStorage.addMemoryLayered("TypeScript codebase", "project", null, { type: "fact" }, null, { buildGraph: true });
+  await localStorage.addMemoryLayered("Go microservices", "project", null, { type: "fact" }, null, { buildGraph: true });
+  const summaryNodes = await localStorage.getSummaryNodes("project");
+  const categoryNodes = await localStorage.getCategoryNodes("project");
+  const edges = await localStorage.getGraphEdges("project");
+  assert.ok(Array.isArray(summaryNodes));
+  assert.ok(Array.isArray(categoryNodes));
+  assert.ok(Array.isArray(edges));
+});
+
+test("storage - updateGraphEdges/addGraphEdge/addSummaryNode/addCategoryNode", async () => {
+  await localStorage.addSummaryNode({ id: "summary_test", content: "test summary", baseIds: ["m1"], tags: ["test"], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  await localStorage.addCategoryNode({ id: "category_test", category: "test", memoryIds: [], tags: ["test"], count: 0 });
+  await localStorage.addGraphEdge({ from: "m1", to: "m2", type: "semantic", score: 0.5, weight: 0.5, timestamp: new Date().toISOString() });
+  await localStorage.updateGraphEdges([]);
+  const nodes = await localStorage.getSummaryNodes("default");
+  assert.ok(Array.isArray(nodes));
+});
+
+test("storage - searchMemoriesLayered uses layered nodes", async () => {
+  await localStorage.addMemory("React UI component", "project");
+  await localStorage.addMemory("Go API server", "project");
+  await localStorage.addMemoryLayered("TypeScript frontend with React", "project", null, { type: "fact" }, null, { buildGraph: true });
+  const baseResults = await localStorage.searchMemories("React", { scope: "project" });
+  const layeredResults = await localStorage.searchMemoriesLayered("React", { scope: "project", layered: true });
+  assert.ok(layeredResults.length >= baseResults.length);
+});
+
+test("storage - migrateFlatToLayered", async () => {
+  await localStorage.addMemory("legacy memory one", "project");
+  await localStorage.addMemory("legacy memory two", "project");
+  const graphData = await localStorage.migrateFlatToLayered("project");
+  assert.ok(graphData.baseNodes.length >= 1);
+  assert.ok(Array.isArray(graphData.summaryNodes));
+  assert.ok(Array.isArray(graphData.categoryNodes));
+  assert.ok(Array.isArray(graphData.edges));
+});
+
+async function storageBuildGraphAndPersistFromModule(scope) {
+  const { buildGraphAndPersist } = await import("../src/storage/local.js");
+  return buildGraphAndPersist(scope);
+}
