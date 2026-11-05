@@ -12,6 +12,7 @@ import { ExtractionService } from "./extraction.js";
 import { setEmbeddingService } from "./storage/local.js";
 import { skillsStorage } from "./skills.js";
 import { resolveProjectShared } from "./projectShared.js";
+import { simulateDualRouteRetrieve } from "./retrieval.js";
 import path from "path";
 import os from "os";
 
@@ -22,6 +23,7 @@ const injectedSessions = new Set();
 const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
   "export", "import", "list-shards", "dream", "restore-trash",
+  "organize", "retrieve",
   "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete",
   "skill-list", "skill-show", "skill-save", "skill-delete",
 ];
@@ -140,6 +142,18 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
   if (mode === "migrate") return storage.migrate(args.fromPath);
   if (mode === "dream") return runDreaming({ memoryConfig, storage, activeProject });
   if (mode === "restore-trash") return (await import("./dreaming.js")).restoreTrashEntry(args.id, activeProject);
+  if (mode === "organize") {
+    const effectiveScope = activeProject?.projectName ? `project:${activeProject.projectName}` : (args.scope || "default");
+    const graphData = await storage.buildGraphAndPersist(effectiveScope);
+    const tagsCount = (graphData.categoryNodes || []).reduce((sum, c) => sum + (c.tags?.length || 0), 0);
+    return { ...graphData, tagsCount };
+  }
+  if (mode === "retrieve") {
+    const effectiveScope = activeProject?.projectName ? `project:${activeProject.projectName}` : (args.scope || "default");
+    const memories = await storage.searchMemories(args.query || "", { scope: effectiveScope, includeExpired: true });
+    const graphData = await storage.buildGraphAndPersist(effectiveScope);
+    return simulateDualRouteRetrieve(args.query || "", memories, graphData, args.filters || {});
+  }
 
   throw new Error(`Unknown memory mode: ${mode}`);
 }

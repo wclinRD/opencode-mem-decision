@@ -1,5 +1,6 @@
-import { searchMemories, listMemories } from "./storage/local.js";
+import { searchMemories, listMemories, buildGraphAndPersist } from "./storage/local.js";
 import { loadConfig } from "./config.js";
+import { simulateDualRouteRetrieve } from "./retrieval.js";
 
 export const INJECTION_MARKER = "<!-- opencode-mem-decision:injected -->";
 
@@ -44,24 +45,37 @@ export async function injectMemories({
 
   let candidates = [];
 
-  if (recallMode === "relevant" || recallMode === "both") {
+  if (recallMode === "dual" || recallMode === "both") {
+    const query = sessionData?.latestMessage || sessionData?.messages?.slice(-1)?.[0]?.content || "";
+    const filters = { scope: effectiveScope, includeExpired: false };
+    const memories = await storage.searchMemories("", { scope: effectiveScope, includeExpired: true });
+    const graphData = await storage.buildGraphAndPersist(effectiveScope);
+    const result = simulateDualRouteRetrieve(query, memories, graphData, filters);
+    const system1 = result.system1Results || [];
+    const system2 = result.system2Results || [];
+    const allIds = new Set([...system1, ...system2].map((m) => m.id));
+    candidates = [...system1, ...system2].filter((m) => allIds.has(m.id)).slice(0, maxMemories * 2);
+
+    // Default recent fallback when dual returns little
+    if (recallMode === "both" && candidates.length < maxMemories) {
+      const relevantIds = new Set(candidates.map((m) => m.id));
+      const defaultConfig = loadConfig();
+      const recent = await listMemories(maxMemories * 2, effectiveScope, defaultConfig);
+      const recentUnique = recent.filter((m) => !relevantIds.has(m.id));
+      candidates = [...candidates, ...recentUnique].slice(0, maxMemories);
+    }
+  } else if (recallMode === "relevant") {
     const query = sessionData?.latestMessage || sessionData?.messages?.slice(-1)?.[0]?.content || "";
     const defaultConfig = loadConfig();
     const filters = { scope: effectiveScope, includeExpired: false };
     candidates = await searchMemories(query, filters);
 
-    // Default recall must still do something when nothing is relevant.
-    if (recallMode === "relevant" && candidates.length === 0) {
+    if (candidates.length === 0) {
       candidates = await listMemories(maxMemories * 2, effectiveScope, defaultConfig);
     }
-  }
-
-  if (recallMode === "recent" || (recallMode === "both" && candidates.length < maxMemories)) {
+  } else if (recallMode === "recent") {
     const defaultConfig = loadConfig();
-    const recent = await listMemories(maxMemories * 2, effectiveScope, defaultConfig);
-    const relevantIds = new Set(candidates.map((m) => m.id));
-    const recentUnique = recent.filter((m) => !relevantIds.has(m.id));
-    candidates = [...candidates, ...recentUnique].slice(0, maxMemories);
+    candidates = await listMemories(maxMemories * 2, effectiveScope, defaultConfig);
   }
 
   if (excludeCurrentSession && sessionData?.id) {

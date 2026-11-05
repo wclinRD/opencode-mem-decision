@@ -7,6 +7,8 @@ import { deriveKey, encryptData, decryptData } from "./encryption.js";
 import { ensureSchema } from "./migrations.js";
 import { findDuplicateMemories, buildDuplicateConfig } from "../dedup.js";
 import { randomBytes } from "node:crypto";
+import { buildHierarchicalGraph } from "../organize.js";
+import { saveGraph, loadGraph } from "./graph.js";
 
 let currentEmbeddingService = null;
 let encryptionKey = null;
@@ -553,6 +555,27 @@ export async function migrate(fromPath) {
   return toDb.memories.length;
 }
 
+export async function buildGraphAndPersist(scope = "default") {
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
+  const db = await readJsonFile(filePath);
+  const memories = (db.memories || []).map(attachProjectName);
+  const graphData = buildHierarchicalGraph(memories, { similarityThreshold: 0.4 });
+  await saveGraph(graphData);
+  return graphData;
+}
+
+export async function listGraphMetrics() {
+  const graphData = await loadGraph();
+  if (!graphData) return { baseNodes: 0, summaryNodes: 0, categoryNodes: 0, edges: 0 };
+  return {
+    baseNodes: (graphData.baseNodes || []).length,
+    summaryNodes: (graphData.summaryNodes || []).length,
+    categoryNodes: (graphData.categoryNodes || []).length,
+    edges: (graphData.edges || []).length,
+  };
+}
+
 export async function addKnowledge(content, id) {
   const filePath = path.join(getStorageDir(), KNOWLEDGE_FILE);
   await ensureDir(path.dirname(filePath));
@@ -622,4 +645,6 @@ export const localStorage = {
   cleanupTrash,
   getTtlDaysForMemory,
   optimizeMemories,
+  buildGraphAndPersist,
+  listGraphMetrics,
 };

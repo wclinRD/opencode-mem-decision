@@ -4,6 +4,24 @@ function tokenize(text) {
   return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
 }
 
+function bm25Score(queryTokens, documentTokens, k1 = 1.2, b = 0.75, avgDocLen = documentTokens.length) {
+  const docLen = documentTokens.length;
+  if (avgDocLen <= 0) avgDocLen = docLen;
+  let score = 0;
+  const termFreqs = new Map();
+  for (const t of documentTokens) {
+    termFreqs.set(t, (termFreqs.get(t) || 0) + 1);
+  }
+  for (const qToken of queryTokens) {
+    const tf = termFreqs.get(qToken) || 0;
+    if (tf === 0) continue;
+    const idf = Math.log(1 + (1 + tf) / (0.1 + tf));
+    const termScore = idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (docLen / avgDocLen)));
+    score += termScore;
+  }
+  return score;
+}
+
 /**
  * Build hierarchical memory graph from stored memories.
  * @param {Array} memories - Array of memory objects.
@@ -38,13 +56,24 @@ export function buildHierarchicalGraph(memories, config = {}) {
     }
   }
 
-  // Create similarity edges between base nodes with shared tags or text similarity
+  // Create similarity edges between base nodes with shared tags or BM25 text similarity
+  const allTokens = new Map();
+  for (const node of baseNodes) {
+    const tokens = node.textVector && Array.isArray(node.textVector) && node.textVector.length > 0 ? node.textVector : tokenize(node.content);
+    for (const t of tokens) {
+      allTokens.set(t, (allTokens.get(t) || 0) + 1);
+    }
+  }
+  const avgTokens = allTokens.size > 0 ? baseNodes.reduce((sum, n) => sum + (n.textVector && Array.isArray(n.textVector) && n.textVector.length > 0 ? n.textVector.length : tokenize(n.content).length), 0) / baseNodes.length : 1;
+
   for (let i = 0; i < baseNodes.length; i++) {
     for (let j = i + 1; j < baseNodes.length; j++) {
       const a = baseNodes[i];
       const b = baseNodes[j];
       const tagOverlap = tagOverlapScore(a.tags, b.tags);
-      const textSim = textSimilarity(a.textVector, b.textVector);
+      const aTokens = a.textVector && Array.isArray(a.textVector) && a.textVector.length > 0 ? a.textVector : tokenize(a.content);
+      const bTokens = b.textVector && Array.isArray(b.textVector) && b.textVector.length > 0 ? b.textVector : tokenize(b.content);
+      const textSim = bm25Score(aTokens, bTokens, undefined, undefined, avgTokens);
       const score = Math.max(tagOverlap, textSim);
       if (score >= (config.similarityThreshold || 0.4)) {
         edges.push({
@@ -91,7 +120,9 @@ export function buildHierarchicalGraph(memories, config = {}) {
     for (const other of baseNodes) {
       if (base.id === other.id || visited.has(other.id)) continue;
       const tagOverlap = tagOverlapScore(base.tags, other.tags);
-      const textSim = textSimilarity(base.textVector, other.textVector);
+      const baseTokens = base.textVector && Array.isArray(base.textVector) && base.textVector.length > 0 ? base.textVector : tokenize(base.content);
+      const otherTokens = other.textVector && Array.isArray(other.textVector) && other.textVector.length > 0 ? other.textVector : tokenize(other.content);
+      const textSim = bm25Score(baseTokens, otherTokens, undefined, undefined, avgTokens);
       if (Math.max(tagOverlap, textSim) >= (config.similarityThreshold || 0.4)) {
         cluster.push(other);
       }

@@ -1,4 +1,6 @@
 import { runDreaming, restoreTrashEntry } from "../dreaming.js";
+import { buildHierarchicalGraph } from "../organize.js";
+import { simulateDualRouteRetrieve } from "../retrieval.js";
 
 export function registerMemoryTools({ tools, storage, memoryConfig, activeProject }) {
   tools.define("memory", {
@@ -132,6 +134,38 @@ export function registerMemoryTools({ tools, storage, memoryConfig, activeProjec
             if ("tags" in metadata) updates.tags = metadata.tags;
           }
           return storage.updateMemory(id, updates);
+        },
+      },
+      organize: {
+        description: "Build hierarchical graph and summary nodes from memories",
+        parameters: {
+          scope: { type: "string", description: "Memory scope", default: "default" },
+          project: { type: "string", description: "Project name to scope graph to" },
+          similarityThreshold: { type: "number", description: "Similarity threshold for semantic edges and clustering", default: 0.4 },
+        },
+        handler: async ({ scope = "default", project, similarityThreshold = 0.4 }) => {
+          const effectiveScope = project ? `project:${project}` : scope;
+          const graphData = await storage.buildGraphAndPersist(effectiveScope);
+          const tagsCount = (graphData.categoryNodes || []).reduce((sum, c) => sum + (c.tags?.length || 0), 0);
+          return {
+            ...graphData,
+            tagsCount,
+          };
+        },
+      },
+      retrieve: {
+        description: "Dual-route retrieval using graph and memories",
+        parameters: {
+          query: { type: "string", description: "Query text" },
+          scope: { type: "string", description: "Memory scope", default: "default" },
+          project: { type: "string", description: "Project name to scope retrieval to" },
+          filters: { type: "object", description: "Filter options", default: {} },
+        },
+        handler: async ({ query, scope = "default", project, filters = {} }) => {
+          const effectiveScope = project ? `project:${project}` : scope;
+          const memories = await storage.searchMemories(query, { scope: effectiveScope, includeExpired: true });
+          const graphData = await storage.buildGraphAndPersist(effectiveScope);
+          return simulateDualRouteRetrieve(query, memories, graphData, filters);
         },
       },
       dream: {
