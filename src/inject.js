@@ -1,6 +1,7 @@
 import { searchMemories, listMemories, buildGraphAndPersist } from "./storage/local.js";
 import { loadConfig } from "./config.js";
 import { simulateDualRouteRetrieve } from "./retrieval.js";
+import { isGenericOrNoiseText } from "./capture.js";
 
 export const INJECTION_MARKER = "<!-- opencode-mem-decision:injected -->";
 
@@ -109,7 +110,11 @@ export async function injectMemories({
     }
   }
 
-  const filtered = candidates.slice(0, maxMemories);
+  const filtered = candidates
+    .filter((m) => Number(m.confidence || 0.5) >= 0.5)
+    .filter((m) => (m.type || "unknown") !== "noise")
+    .filter((m) => !isGenericOrNoiseText(m.content))
+    .slice(0, maxMemories);
 
   if (memoryConfig.chatMessage.filterInjectedPrompts) {
     return filtered.filter((m) => !isSystemPrompt(m.content));

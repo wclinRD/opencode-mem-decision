@@ -79,12 +79,23 @@ export class ExtractionService {
 
   _extractStub(text) {
     const words = text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
-    const topics = [...new Set(words.slice(0, 5))];
+    const technicalWords = words.filter((w) => TECHNICAL_KEYWORDS.has(w) || /[a-z]+/.test(w) && /[0-9]+/.test(w));
+    if (technicalWords.length < 3) {
+      return null; // No meaningful technical content to extract
+    }
+    const topics = [...new Set(technicalWords.slice(0, 5))].filter((t) => t.length > 3);
+    const codeSnippets = text.match(/`[^`]+`/g)?.slice(0, 3) || [];
+    const decisions = [];
+    // Look for decision-like patterns: "decide", "use", "prefer", "avoid", "must", "change"
+    const decisionMatches = text.match(/(?:decide|use|prefer|avoid|must|should|change|adopt|remove|keep|use|try)\b.+/gi) || [];
+    for (const d of decisionMatches) {
+      if (d.length > 20) decisions.push(d.trim());
+    }
     return {
       summary: text.slice(0, 200) + (text.length > 200 ? "..." : ""),
       topics,
-      codeSnippets: text.match(/`[^`]+`/g)?.slice(0, 3) || [],
-      decisions: [],
+      codeSnippets,
+      decisions,
     };
   }
 }

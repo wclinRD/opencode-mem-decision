@@ -368,7 +368,7 @@ export async function listAllMemories(scope = "default") {
   return (db.memories || []).map(attachProjectName);
 }
 
-export async function listMemories(limit = 50, scope = "default", ttlConfig = {}) {
+export async function listMemories(limit = 50, scope = "default", ttlConfig = {}, filters = {}) {
   const isProjectScope = scope && scope.startsWith("project:");
   const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
   const db = await readJsonFile(filePath);
@@ -376,9 +376,17 @@ export async function listMemories(limit = 50, scope = "default", ttlConfig = {}
   const memoryCount = db.memories.length;
   const nowMs = Date.now();
 
+  const excludeNoise = filters.excludeNoise !== false;
+  const minConfidence = filters.minConfidence !== undefined ? Number(filters.minConfidence) : 0;
+  const excludedTypes = filters.excludedTypes || [];
+
   return db.memories
     .filter((m) => scope === "default" || m.scope === scope)
     .filter((memory) => {
+      if (excludeNoise) {
+        if (memory.type === "noise" || (minConfidence > 0 && Number(memory.confidence) < minConfidence)) return false;
+        if (excludedTypes.includes(memory.type)) return false;
+      }
       const cutoff = new Date(Date.now() - getTtlDaysForMemory(memory, ttlConfig) * 86400000).toISOString();
       return memory.createdAt >= cutoff;
     })

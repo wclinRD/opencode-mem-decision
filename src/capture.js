@@ -89,9 +89,33 @@ const lowValuePatterns = [
   /(?:0x)?[0-9a-fA-F]{16,}(?:\/[0-9a-fA-F]+)+/g,
   /\b(?:Error|Exception|Stack trace)\b[\s\S]{0,120}(?=\n\n|\n$)/gi,
   /\b(?:at\s+\w+\.)+\w+:[0-9]+:[0-9]+/gm,
-  /(?:檢查|建立|查看|繼續|已提交|已修改|準備|完成|查看修改|提交修改|推送)\b/gi,
-  /\b(branch|commit|push|git status)\b/gi,
+  /(?:檢查|建立|查看|繼續|已提交|已修改|準備|完成|查看修改|提交修改|推送|成功|失敗|錯誤|已刪除|已重設|已初始化|已更新|已刪除)\b/gi,
+  /\b(branch|commit|push|git status|pull|merge)\b/gi,
 ];
+
+const NOISE_WORDS = new Set([
+  "okay", "ok", "yes", "no", "please", "thanks", "hello", "hi", "how", "why",
+  "what", "when", "where", "who", "tell", "show", "check", "list", "try",
+  "next", "step", "done", "complete", "finish", "continue", "move", "remove",
+  "debug", "resolve", "review", "verify", "execute", "generate", "produce",
+  "output", "return", "result",
+]);
+
+/**
+ * Heuristically determine if text is generic/noise rather than actionable technical content.
+ */
+export function isGenericOrNoiseText(text) {
+  const words = text.toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  if (words.length < 4) return true;
+  let noiseScore = 0;
+  let techScore = 0;
+  for (const w of words) {
+    if (NOISE_WORDS.has(w)) noiseScore++;
+    if (TECHNICAL_KEYWORDS.has(w)) techScore++;
+  }
+  const ratio = noiseScore / words.length;
+  return ratio > 0.4 && techScore < 2;
+}
 
 const TECHNICAL_KEYWORDS = new Set([
   "typescript", "javascript", "python", "go", "rust", "react", "node", "docker",
@@ -151,6 +175,7 @@ export function filterSessionText(raw) {
     .map((l) => l.replace(/\n/g, ""))
     .filter((l) => l.trim().length > 0 && !shouldExcludeLine(l));
   const joined = parts.join("\n").trim();
+  if (isGenericOrNoiseText(joined)) return "";
   return joined;
 }
 
@@ -179,6 +204,12 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   const classified = classifyMemory ? classifyMemory() : defaultClassifyMemory(filtered);
   const sensitivity = checkSensitive(filtered);
 
+  // Skip storing generic or noise text: it does not help the LLM solve problems.
+  if (isGenericOrNoiseText(filtered)) {
+    console.log(`[opencode-mem-decision] auto-capture skipped: filtered text is generic/noise`);
+    return { action: "skip", reason: "noise detected" };
+  }
+
   // Summarize before classification if text is long
   const useSummary = filtered.length > 5000;
   const textToClassify = useSummary ? summarizeLongText(filtered) : filtered;
@@ -201,15 +232,15 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   // Skip storing raw sensitive/high-risk content; store summary only if appropriate
   if (sensitivity === "sensitive" && filtered.length > 1500 && useSummary) {
     const summaryText = storageText;
-    if (summaryText.length < MIN_QUALITY_LENGTH) {
+    if (summaryText.length < MIN_QUALITY_LENGTH || isGenericOrNoiseText(summaryText)) {
       await logEvent({
         sessionID: sessionData?.id,
         actor: "system",
         event_type: "auto-capture",
-        description: `Sensitive content skipped: summary below quality threshold`,
+        description: `Sensitive content skipped: summary below quality threshold or noise`,
         related_memory_ids: [],
       });
-      return { action: "skip", reason: "sensitive content below threshold" };
+      return { action: "skip", reason: "sensitive content below threshold or noise" };
     }
     const memory = await storage.addMemory(
       redactCredentials(summaryText),
@@ -257,10 +288,10 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     try {
       const extracted = await extractionService.extract(filtered);
       if (extracted && typeof extracted === "object") {
-        const summary = typeof extracted.summary === "string" && extracted.summary.trim().length > 0 ? extracted.summary : null;
-        const decisions = Array.isArray(extracted.decisions) ? extracted.decisions.filter(Boolean) : [];
-        const topics = Array.isArray(extracted.topics) ? extracted.topics.filter(Boolean) : [];
-        const codeSnippets = Array.isArray(extracted.codeSnippets) ? extracted.codeSnippets.filter(Boolean) : [];
+        const summary = typeof extracted.summary === "string" && extracted.summary.trim().length > 0 && !isGenericOrNoiseText(extracted.summary) ? extracted.summary : null;
+        const decisions = Array.isArray(extracted.decisions) ? extracted.decisions.filter((d) => d && d.trim().length > 0 && !isGenericOrNoiseText(d)) : [];
+        const topics = Array.isArray(extracted.topics) ? extracted.topics.filter((t) => t && t.trim().length > 0) : [];
+        const codeSnippets = Array.isArray(extracted.codeSnippets) ? extracted.codeSnippets.filter((s) => s && s.trim().length > 0) : [];
 
         if (summary) {
           const summaryText = `Auto-extracted summary:\n${summary}\nTopics: ${topics.join(", ")}`;

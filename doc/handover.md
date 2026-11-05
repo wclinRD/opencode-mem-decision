@@ -53,19 +53,31 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - Audited injection pipeline for sensitive leakage risk; ensured sensitive memories are filtered and credentials are redacted.
 - Commit: `859ed87`
 
+## Phase 7: Noise Filter and Injection Reliability
+- Added `isGenericOrNoiseText` heuristic with length and keyword scoring to block generic/noise chat from storage and injection.
+- Lowered short-text length threshold to 4 words to allow short technical statements like "Deploys use Fly.io" through noise filtering.
+- Updated `injectMemories` to default missing `confidence` to 0.5 and missing `type` to "unknown" so valid memories are not silently dropped.
+- Changed `config.js` default `recallScope` from `"project"` to `"default"` so prompt hooks by default search all default memories.
+- Extended `storage/local.js` `listMemories` with filters `excludeNoise`, `minConfidence`, `excludedTypes`.
+- Updated web server `/api/memory` and `/api/stats` to exclude noise by default using new filters.
+- Fixed prompt hook tests by ensuring memory scope matches default recall scope and injection filters don't overfilter.
+- All 107 tests currently pass.
+
 ## Key Files Changed
 - `src/classify.js`: dynamic tagging and weighted confidence functions.
 - `src/organize.js`: BM25 text similarity and graph construction.
-- `src/storage/local.js`: layered storage methods and weighted search/list ranking.
+- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support.
 - `src/retrieval.js`: dual-route retrieval simulation and BM25 scoring.
-- `src/capture.js`: session filtering, summarization, and sensitive detection.
-- `src/inject.js`: context-aware splitting, fallback retrieval, and injection formatting.
+- `src/capture.js`: session filtering, summarization, sensitive detection, and noise heuristic `isGenericOrNoiseText`.
+- `src/inject.js`: context-aware splitting, fallback retrieval, injection formatting, and candidate filtering with default confidence/type fallbacks.
 - `src/plugin.js`: tool schema and injection integration with memory modes.
-- `src/config.js`: new `fallbackRetrieval` default option.
+- `src/config.js`: new `fallbackRetrieval` default option; updated `recallScope` default to `"default"`.
+- `src/server.js`: memory and stats endpoints use noise-excluded memory listing.
 - `tests/storage.test.js`, `tests/capture.test.js`, `tests/organize.test.js`: new unit tests for new features.
+- `tests/inject.test.js`, `tests/plugin.test.js`: updated injection and prompt hook tests for default scope behavior.
 
 ## Verification & Policy
-- All phases passed unit and integration tests; 106 tests pass in current state.
+- All 107 tests pass in current state.
 - Each phase committed separately with clear descriptions.
 - No context capacity threshold verification was implemented due to no actual measure tool for opencode context percentage in current harness. Progress paused after core Phase 2-3 work and then implemented subsequent phases.
 

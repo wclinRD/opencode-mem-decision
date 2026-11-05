@@ -38,8 +38,8 @@ const config = (overrides = {}) => ({
 });
 
 test("inject - relevant recall returns matching memories", async () => {
-  const memory = await localStorage.addMemory("Deploys use Fly.io", "project");
-  await localStorage.addMemory("Unrelated gardening note", "project");
+  const memory = await localStorage.addMemory("Deploys use Fly.io", "default");
+  await localStorage.addMemory("Unrelated gardening note", "default");
 
   const results = await injectMemories({
     sessionData: { id: "ses_1", latestMessage: "How do Fly deploys work?" },
@@ -52,7 +52,7 @@ test("inject - relevant recall returns matching memories", async () => {
 });
 
 test("inject - relevant recall falls back to recent memories", async () => {
-  const memory = await localStorage.addMemory("Deploys use Fly.io", "project");
+  const memory = await localStorage.addMemory("Deploys use Fly.io", "default");
 
   const results = await injectMemories({
     sessionData: { id: "ses_1", latestMessage: "quantum banana" },
@@ -80,7 +80,7 @@ test("inject - duplicates by id are injected once", async () => {
   const memory = {
     id: "mem_duplicate",
     content: "Deploys use Fly.io",
-    scope: "project",
+    scope: "default",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

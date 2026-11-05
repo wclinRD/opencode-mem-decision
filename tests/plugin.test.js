@@ -122,7 +122,7 @@ test("system - setup registers a prompt hook", async () => {
 });
 
 test("system - prompt hook injects memories once when injectOn is first", async () => {
-  await localStorage.addMemory("Seeded memory about Fly deploys", "project");
+  await localStorage.addMemory("Seeded memory about Fly deploys", "default");
 
   const { context, hooks } = createContext({
     webServerHost: "",
@@ -145,7 +145,7 @@ test("system - prompt hook injects memories once when injectOn is first", async 
 });
 
 test("system - prompt hook injects on every prompt when injectOn is always", async () => {
-  await localStorage.addMemory("Seeded memory about Fly deploys", "project");
+  await localStorage.addMemory("Seeded memory about Fly deploys", "default");
 
   const { context, hooks } = createContext({
     webServerHost: "",
