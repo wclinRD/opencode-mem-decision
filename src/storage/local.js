@@ -470,6 +470,33 @@ export async function listShards() {
   return Array.from(shards);
 }
 
+export async function listProjectCounts() {
+  const projectsDir = path.join(getStorageDir(), PROJECTS_DIR);
+  const counts = [];
+  try {
+    const projects = await fs.readdir(projectsDir);
+    for (const project of projects) {
+      const projectDbPath = projectStoragePath(project);
+      try {
+        const projectDb = await readJsonFile(projectDbPath);
+        const projectMemories = (projectDb.memories || []).filter((m) => m.scope && m.scope.startsWith("project:"));
+        if (projectMemories.length) {
+          counts.push({
+            name: project,
+            count: projectMemories.length,
+            scope: projectMemories[0].scope,
+          });
+        }
+      } catch (e) {
+        // ignore unreadable project files
+      }
+    }
+  } catch (e) {
+    // projects dir does not exist
+  }
+  return counts.sort((a, b) => Number(b.count) - Number(a.count));
+}
+
 export async function migrate(fromPath) {
   const filePath = path.join(getStorageDir(), MEMORIES_FILE);
   const fromDb = JSON.parse(await fs.readFile(fromPath, "utf-8"));
@@ -538,6 +565,7 @@ export const localStorage = {
   exportMemories,
   importMemories,
   listShards,
+  listProjectCounts,
   migrate,
   addKnowledge,
   listKnowledge,

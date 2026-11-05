@@ -4,7 +4,7 @@ import * as fsPromises from "fs/promises";
 import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
-import { localStorage } from "./storage/local.js";
+import { localStorage, listProjectCounts } from "./storage/local.js";
 import { buildProfile } from "./profile.js";
 import { runDreaming } from "./dreaming.js";
 import { summarizeRecentEvents } from "./eventLog.js";
@@ -112,6 +112,9 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
           knowledge: (await storage.listKnowledge()).length,
           timestamp: new Date().toISOString(),
         });
+      } else if (path === "/api/projects" && method === "GET") {
+        const projectCounts = await listProjectCounts();
+        sendJson(res, 200, { projects: projectCounts });
       } else if (path === "/api/config" && method === "GET") {
         const fullConfig = readConfigFile(configPath || DEFAULT_CONFIG_PATH);
         sendJson(res, 200, maskSensitiveConfig(fullConfig));
@@ -130,12 +133,14 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
       } else if (path === "/api/memory/search" && method === "GET") {
         const query = url.searchParams.get("query") || "";
         const scope = url.searchParams.get("scope") || "default";
+        const project = url.searchParams.get("project") || null;
+        const effectiveScope = project ? `project:${project}` : scope;
         const type = url.searchParams.get("type") || "all";
         const confidence = url.searchParams.get("confidence");
         const timeRange = url.searchParams.get("timeRange");
         const ttlDays = url.searchParams.get("ttlDays");
         const includeExpired = url.searchParams.get("includeExpired") === "true";
-        const filters = { scope };
+        const filters = { scope: effectiveScope };
         if (type !== "all") filters.type = type;
         if (confidence) filters.confidence = Number(confidence);
         if (timeRange) filters.timeRange = Number(timeRange);
@@ -150,12 +155,17 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         sendJson(res, 200, await storage.getMemory(id));
       } else if (path === "/api/memory" && method === "DELETE") {
         const scope = url.searchParams.get("scope") || "default";
+        const project = url.searchParams.get("project") || null;
+        const effectiveScope = project ? `project:${project}` : scope;
         const query = url.searchParams.get("query") || "";
-        const deletedCount = await storage.deleteMemories(query, scope);
+        const deletedCount = await storage.deleteMemories(query, effectiveScope);
         sendJson(res, 200, { deleted: deletedCount });
       } else if (path === "/api/memory" && method === "POST") {
         const body = await parseBody(req);
-        sendJson(res, 201, await storage.addMemory(body.content, body.scope || "project"));
+        const scope = body.scope || "project";
+        const project = body.project;
+        const effectiveScope = project ? `project:${project}` : scope;
+        sendJson(res, 201, await storage.addMemory(body.content, effectiveScope));
       } else if (path.match(/^\/api\/memory\/[^/]+$/) && method === "DELETE") {
         const id = path.split("/").pop();
         sendJson(res, 200, { deleted: await storage.deleteMemory(id) });

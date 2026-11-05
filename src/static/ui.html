@@ -254,6 +254,10 @@
       color: var(--danger);
       border-color: var(--danger);
     }
+    .pill.project-pill {
+      color: var(--primary);
+      border-color: var(--primary);
+    }
     .time-row {
       font-size: 11px;
       color: var(--muted);
@@ -321,6 +325,7 @@
     <div class="stats" id="stats">
       <span>Memories: <strong id="statMemories">0</strong></span>
       <span>Knowledge: <strong id="statKnowledge">0</strong></span>
+      <span class="pill" id="projectStatus">Project: —</span>
     </div>
   </header>
 
@@ -343,6 +348,10 @@
             <label for="scope">Scope</label>
             <input id="scope" name="scope" value="project" placeholder="scope (default: project)" />
           </div>
+          <div class="field">
+            <label for="project">Project</label>
+            <input id="project" name="project" value="current" placeholder="Project name (default: current)" />
+          </div>
           <button type="submit" class="primary">Add Memory</button>
         </div>
       </form>
@@ -351,6 +360,9 @@
         <input id="searchInput" type="text" placeholder="Search memories..." />
         <select id="scopeFilter">
           <option value="all">All scopes</option>
+        </select>
+        <select id="projectFilter">
+          <option value="all">All projects</option>
         </select>
         <select id="typeFilter">
           <option value="all">All types</option>
@@ -535,6 +547,7 @@
     }
 
     let scopesPopulated = false;
+    let projectFilterPopulated = false;
     function populateScopeFilter(data) {
       const sel = document.getElementById("scopeFilter");
       const existing = new Set();
@@ -552,24 +565,60 @@
       scopesPopulated = true;
     }
 
+    async function loadProjects() {
+      try {
+        const data = await request("/api/projects");
+        const sel = document.getElementById("projectFilter");
+        const currentValues = new Set();
+        Array.from(sel.options).forEach((opt) => currentValues.add(opt.value));
+        sel.innerHTML = `<option value="all">All projects</option>`;
+        (data.projects || []).forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.name;
+          opt.textContent = `${p.name} (${p.count})`;
+          sel.appendChild(opt);
+        });
+        projectFilterPopulated = true;
+        updateProjectStatus(data.projects);
+      } catch (e) {
+        console.error("projects error", e);
+      }
+    }
+
+    function updateProjectStatus(projects) {
+      const stat = document.getElementById("projectStatus");
+      if (!projects || !projects.length) {
+        stat.textContent = "Project: — (global)";
+        stat.classList.add("pill");
+        stat.classList.remove("project-pill");
+      } else {
+        const active = projects.find((p) => p.count > 0);
+        stat.textContent = active ? `Project: ${active.name} (${active.count})` : "Project: — (global)";
+        stat.classList.add("pill", "project-pill");
+      }
+    }
+
     async function loadMemories(filter = null) {
       const list = document.getElementById("memoryList");
       list.innerHTML = "";
       try {
         let data = await request("/memory");
         if (!filter) populateScopeFilter(data);
+        await loadProjects();
         const query = (filter || document.getElementById("searchInput").value).trim();
         const scopeFilter = document.getElementById("scopeFilter").value;
+        const projectFilter = document.getElementById("projectFilter").value;
         const typeFilter = document.getElementById("typeFilter").value;
         const confidenceFilter = document.getElementById("confidenceFilter").value;
         const priorityFilter = document.getElementById("priorityFilter").value;
         const timeRangeFilter = document.getElementById("timeRangeFilter").value;
         const sortSelect = document.getElementById("sortSelect").value;
-        if (query || scopeFilter !== "all" || typeFilter !== "all" || confidenceFilter !== "all" || priorityFilter !== "all" || timeRangeFilter !== "all") {
+        if (query || scopeFilter !== "all" || projectFilter !== "all" || typeFilter !== "all" || confidenceFilter !== "all" || priorityFilter !== "all" || timeRangeFilter !== "all") {
           const params = new URLSearchParams({
             query,
             scope: scopeFilter === "all" ? "default" : scopeFilter,
           });
+          if (projectFilter !== "all") params.set("project", projectFilter);
           if (typeFilter !== "all") params.set("type", typeFilter);
           if (confidenceFilter !== "all") params.set("confidence", confidenceFilter);
           if (priorityFilter !== "all") params.set("priority", priorityFilter);
@@ -597,6 +646,7 @@
             <div class="card-content">${escapeHtml(m.content)}</div>
             <div class="meta">
               <span class="pill">${escapeHtml(m.scope || "default")}</span>
+              ${m.projectName ? `<span class="pill project-pill">${escapeHtml(m.projectName)}</span>` : ""}
               <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
               <span class="pill ${confClass}" data-conf="${escapeHtml(m.confidence || 0.5)}">${conf.toFixed(2)}</span>
               <span class="pill sensitivity-${sensClass}">${escapeHtml(m.sensitivity || "normal")}</span>
@@ -617,8 +667,10 @@
       }
     }
 
-    async function addMemory(content, scope = "project") {
-      const result = await request("/memory", { method: "POST", body: JSON.stringify({ content, scope }) });
+    async function addMemory(content, scope = "project", project = "current") {
+      const payload = { content, scope };
+      if (project && project !== "current") payload.project = project;
+      const result = await request("/memory", { method: "POST", body: JSON.stringify(payload) });
       return result;
     }
 
@@ -634,9 +686,10 @@
       e.preventDefault();
       const content = document.getElementById("content").value.trim();
       const scope = document.getElementById("scope").value.trim() || "project";
+      const project = document.getElementById("project").value.trim() || "current";
       if (!content) return;
       try {
-        await addMemory(content, scope);
+        await addMemory(content, scope, project);
         document.getElementById("content").value = "";
         toast("Memory added.", "success");
         await loadMemories();
@@ -661,17 +714,23 @@
     function updateDeleteAllFilterState() {
       const q = document.getElementById("searchInput").value.trim();
       const scopeFilter = document.getElementById("scopeFilter").value;
-      deleteAllFilterButton.disabled = !(q || scopeFilter !== "all");
+      const projectFilter = document.getElementById("projectFilter").value;
+      deleteAllFilterButton.disabled = !(q || scopeFilter !== "all" || projectFilter !== "all");
     }
     document.getElementById("searchInput").addEventListener("input", updateDeleteAllFilterState);
     document.getElementById("scopeFilter").addEventListener("change", updateDeleteAllFilterState);
-    document.getElementById("priorityFilter").addEventListener("change", () => {});
+    document.getElementById("projectFilter").addEventListener("change", updateDeleteAllFilterState);
     deleteAllFilterButton.addEventListener("click", async () => {
       const q = document.getElementById("searchInput").value.trim();
       const scopeFilter = document.getElementById("scopeFilter").value;
-      if (!confirm(`Delete ${q ? "matching" : "all within"} scope "${scopeFilter}"?`)) return;
+      const projectFilter = document.getElementById("projectFilter").value;
+      if (!confirm(`Delete ${q ? "matching" : "all within"} scope "${scopeFilter}"${projectFilter !== "all" ? ` and project "${projectFilter}"` : ""}?`)) return;
       try {
-        const deleted = await request("/memory?" + new URLSearchParams({ query: q, scope: scopeFilter }), { method: "DELETE" });
+        const params = new URLSearchParams({
+          scope: scopeFilter === "all" ? "default" : scopeFilter,
+        });
+        if (projectFilter !== "all") params.set("project", projectFilter);
+        const deleted = await request("/memory?" + params.toString(), { method: "DELETE" });
         toast(`Deleted ${deleted.deleted} memory(ies).`, "success");
         await loadMemories();
         await loadStats();
