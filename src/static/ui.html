@@ -397,6 +397,7 @@
           <option value="asc">Oldest first</option>
         </select>
         <button id="searchButton" class="secondary">Search</button>
+        <button id="optimizeMemoryButton" class="secondary">Optimize Memory</button>
         <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
       </div>
 
@@ -1004,6 +1005,22 @@
 
     document.getElementById("loadConfigBtn").addEventListener("click", loadSettings);
     document.getElementById("saveConfigBtn").addEventListener("click", saveSettings);
+    document.getElementById("optimizeMemoryButton").addEventListener("click", async () => {
+      const scope = document.getElementById("scopeFilter").value === "all" ? "default" : document.getElementById("scopeFilter").value;
+      if (!confirm("Optimize memories in scope \"" + scope + "\"? This will merge duplicate content and delete redundant entries.")) return;
+      try {
+        const result = await request("/memory/optimize", {
+          method: "POST",
+          body: JSON.stringify({ scope }),
+        });
+        toast(`Optimized: ${result.deletedCount} deleted, ${result.keptCount} kept.`, "success");
+        settingsLoaded = false;
+        await loadMemories();
+        await loadStats();
+      } catch (e) {
+        toast("Error: " + e.message, "error");
+      }
+    });
 
     (async () => {
       await loadStats();
