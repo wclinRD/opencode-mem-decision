@@ -36,11 +36,11 @@
 - [x] Test capture quality and false positive rate
 
 ## Phase 6: Metadata Weighting & Cutoff Handling
-- [ ] Revise confidence calculation: combine regex, length, time decay, context
-- [ ] Introduce memory priority scoring based on usage recency and importance
-- [ ] Split truncated injection across pages preserving context
-- [ ] Add fallback retrieval for cut-off memory fragments
-- [ ] Audit injection pipeline for sensitive leakage risk
+- [x] Revise confidence calculation: combine regex, length, time decay, context
+- [x] Introduce memory priority scoring based on usage recency and importance
+- [x] Split truncated injection across pages preserving context
+- [x] Add fallback retrieval for cut-off memory fragments
+- [x] Audit injection pipeline for sensitive leakage risk
 
 ## Verification & Commit Policy
 - Each phase must pass unit and integration tests before commit.
@@ -53,4 +53,5 @@
 - Phase 3 core routing integrated into retrieval flow.
 - Phase 4 committed: `fe50a97` layered storage schemas and dual-route integration.
 - Phase 5 committed: `79909ae` capture flow optimization with summarization and sensitive filtering.
-- Phase 6 pending implementation and testing.
+- Phase 6 committed: `859ed87` metadata weighting, cut-off handling, and injection audit.
+- All planned phases completed; benchmarking and integration review pending.
