@@ -1,9 +1,27 @@
+const TECHNICAL_KEYWORDS = new Set([
+  "typescript", "javascript", "python", "go", "rust", "react", "node", "docker",
+  "kubernetes", "aws", "database", "config", "api", "server", "frontend", "backend",
+  "authentication", "authorization", "cache", "deployment", "pipeline", "test",
+  "unit test", "integration", "debug", "log", "performance", "security", "refactor",
+  "architecture", "migration", "schema", "query", "index", "build", "deploy",
+]);
+
 export class ExtractionService {
   constructor(config = {}) {
     this.config = config;
+    this.generateFn = config.generateFn || null;
   }
 
-  async extract(text) {
+  async extract(text, sessionID = null) {
+    // Use the session LLM (generateFn) when available — highest quality.
+    if (this.generateFn) {
+      try {
+        return await this._extractWithGenerateFn(text, sessionID);
+      } catch (e) {
+        console.error(`[opencode-mem-decision] generateFn extraction failed: ${e.message}`);
+        // Fall through to fallback extraction
+      }
+    }
     const provider = this.config.extractionProvider || "stub";
     if (this.config.extractionApiUrl) {
       return this._extractRemote(text, this.config.extractionModel || "gpt-4o-mini", this.config.extractionApiUrl, this.config.extractionApiKey);
@@ -12,6 +30,47 @@ export class ExtractionService {
       return this._extractHf(text, this.config.extractionModel || "Qwen/Qwen2.5-Coder-1.5B-Instruct");
     }
     return this._extractStub(text);
+  }
+
+  async _extractWithGenerateFn(text, sessionID) {
+    const prompt =
+      "Extract memorable information from this session. Return a JSON object with keys: summary (string), topics (array of strings), codeSnippets (array of strings), decisions (array of strings), facts (array of strings), lessons (array of strings). Each item should be a discrete, actionable memory. Do not include filler or generic content.\n\nSession:\n" + text;
+    const response = await this.generateFn(sessionID, prompt);
+    const content = typeof response === "string" ? response : response?.text || "";
+    return this._parseExtractionJson(content);
+  }
+
+  _parseExtractionJson(content) {
+    try {
+      // Handle markdown code fences
+      let cleaned = content.trim();
+      if (cleaned.startsWith("```")) {
+        const lines = cleaned.split("\n");
+        if (lines[lines.length - 1].trim() === "```") {
+          cleaned = lines.slice(1, -1).join("\n").trim();
+        } else {
+          cleaned = lines.slice(1).join("\n").trim();
+        }
+      }
+      const parsed = JSON.parse(cleaned);
+      return {
+        summary: typeof parsed.summary === "string" ? parsed.summary.trim() : "",
+        topics: Array.isArray(parsed.topics) ? parsed.topics.filter((t) => typeof t === "string" && t.trim()) : [],
+        codeSnippets: Array.isArray(parsed.codeSnippets) ? parsed.codeSnippets.filter((s) => typeof s === "string" && s.trim()) : [],
+        decisions: Array.isArray(parsed.decisions) ? parsed.decisions.filter((d) => typeof d === "string" && d.trim()) : [],
+        facts: Array.isArray(parsed.facts) ? parsed.facts.filter((f) => typeof f === "string" && f.trim()) : [],
+        lessons: Array.isArray(parsed.lessons) ? parsed.lessons.filter((l) => typeof l === "string" && l.trim()) : [],
+      };
+    } catch {
+      return {
+        summary: content.trim(),
+        topics: [],
+        codeSnippets: [],
+        decisions: [],
+        facts: [],
+        lessons: [],
+      };
+    }
   }
 
   async _extractRemote(text, model, apiBaseUrl, apiKey) {
@@ -96,6 +155,8 @@ export class ExtractionService {
       topics,
       codeSnippets,
       decisions,
+      facts: decisions,
+      lessons: [],
     };
   }
 }

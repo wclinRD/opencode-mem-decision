@@ -187,7 +187,7 @@ export function checkSensitive(text) {
 
 const MIN_QUALITY_LENGTH = 60;
 
-export async function autoCapture({ sessionData, memoryConfig, storage, classifyMemory, extractionService }) {
+export async function autoCapture({ sessionData, memoryConfig, storage, classifyMemory, extractionService, extractionSessionID = null }) {
   if (!memoryConfig.chatMessage?.enabled) return;
 
   const sessionText =
@@ -261,6 +261,31 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     return { action: "add", id: memory.id, summary: true };
   }
 
+  // AI extraction path: create discrete memories from LLM extraction
+  if (extractionService) {
+    try {
+      const extracted = await extractionService.extract(filtered, extractionSessionID);
+      if (extracted && typeof extracted === "object") {
+        return await storeDiscreteMemories({
+          extracted,
+          filtered,
+          storageText,
+          storage,
+          sessionData,
+          sensitivity,
+          classifiedForText,
+          projectShared,
+          projectTag,
+          duplicateConfig,
+        });
+      }
+      // If extraction returned null, fall through to legacy single-memory path
+    } catch (e) {
+      console.error(`[opencode-mem-decision] extraction failed, falling back to legacy: ${e.message}`);
+    }
+  }
+
+  // Legacy single-memory path (fallback when extraction unavailable)
   const memory = await storage.addMemory(
     useSummary ? redactCredentials(storageText) : redactCredentials(filtered),
     projectShared ? "project:" + projectShared.projectName : "project",
@@ -275,60 +300,12 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     duplicateConfig
   );
 
-  const existingMemories = await storage.listMemories(1000, projectShared ? `project:${projectShared.projectName}` : "default", memoryConfig);
-  const existingIds = new Set(existingMemories.map((m) => m.id));
-
   if (!memory) {
     return { action: "skip", reason: "below similarity threshold" };
   }
 
-  const wasUpdate = existingIds.has(memory.id);
-
-  if (extractionService) {
-    try {
-      const extracted = await extractionService.extract(filtered);
-      if (extracted && typeof extracted === "object") {
-        const summary = typeof extracted.summary === "string" && extracted.summary.trim().length > 0 && !isGenericOrNoiseText(extracted.summary) ? extracted.summary : null;
-        const decisions = Array.isArray(extracted.decisions) ? extracted.decisions.filter((d) => d && d.trim().length > 0 && !isGenericOrNoiseText(d)) : [];
-        const topics = Array.isArray(extracted.topics) ? extracted.topics.filter((t) => t && t.trim().length > 0) : [];
-        const codeSnippets = Array.isArray(extracted.codeSnippets) ? extracted.codeSnippets.filter((s) => s && s.trim().length > 0) : [];
-
-        if (summary) {
-          const summaryText = `Auto-extracted summary:\n${summary}\nTopics: ${topics.join(", ")}`;
-          await storage.addMemory(
-            summaryText,
-            projectShared ? "project:" + projectShared.projectName : "project",
-            sessionData?.id,
-            { type: "summary", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
-            duplicateConfig
-          );
-        }
-        if (decisions.length > 0) {
-          await storage.addMemory(
-            `Auto-extracted decisions:\n${decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")}`,
-            projectShared ? "project:" + projectShared.projectName : "project",
-            sessionData?.id,
-            { type: "decision", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
-            duplicateConfig
-          );
-        }
-        if (codeSnippets.length > 0) {
-          await storage.addMemory(
-            `Auto-extracted code snippets:\n${codeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
-            projectShared ? "project:" + projectShared.projectName : "project",
-            sessionData?.id,
-            { type: "code", confidence: 0.85, sensitive: "normal", priority: 1, tags: ["auto-extraction", ...(projectTag || [])] },
-            duplicateConfig
-          );
-        }
-      }
-    } catch (e) {
-      console.error(`[opencode-mem-decision] extraction failed: ${e.message}`);
-    }
-  }
-
   const summary = await summarizeRecentEvents({ hours: 24 });
-  if (summary && !wasUpdate) {
+  if (summary) {
     await storage.addMemory(
       `Session Summary: ${summary.summary}\nRelated memory IDs: ${summary.related_memory_ids.join(",")}`,
       projectShared ? `project:${projectShared.projectName}` : "project",
@@ -338,8 +315,74 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
     );
   }
 
-  if (wasUpdate) {
-    return { action: "update", id: memory.id };
-  }
   return { action: "add", id: memory.id };
+}
+
+async function storeDiscreteMemories({ extracted, filtered, storageText, storage, sessionData, sensitivity, classifiedForText, projectShared, projectTag, duplicateConfig }) {
+  const scope = projectShared ? `project:${projectShared.projectName}` : "project";
+  const createdIds = [];
+  let createdCount = 0;
+
+  const addDiscrete = async (content, type, extraTags = []) => {
+    if (!content || content.trim().length === 0) return;
+    if (isGenericOrNoiseText(content)) return;
+    const memory = await storage.addMemory(
+      redactCredentials(content),
+      scope,
+      sessionData?.id,
+      {
+        type,
+        confidence: 0.85,
+        sensitive: "normal",
+        priority: 1,
+        tags: ["auto-extraction", ...extraTags, ...(projectTag || [])],
+      },
+      duplicateConfig
+    );
+    if (memory) {
+      createdIds.push(memory.id);
+      createdCount++;
+    }
+  };
+
+  // Summary memory
+  const summary = extracted.summary?.trim();
+  if (summary && !isGenericOrNoiseText(summary)) {
+    const topics = Array.isArray(extracted.topics) ? extracted.topics.filter((t) => t?.trim()) : [];
+    const summaryText = `Auto-extracted summary: ${summary}${topics.length > 0 ? `\nTopics: ${topics.join(", ")}` : ""}`;
+    await addDiscrete(summaryText, "summary", topics);
+  }
+
+  // Discrete decisions — each becomes its own memory
+  const decisions = Array.isArray(extracted.decisions) ? extracted.decisions.filter((d) => d?.trim()) : [];
+  for (const d of decisions) {
+    await addDiscrete(d, "decision");
+  }
+
+  // Discrete facts — each becomes its own memory
+  const facts = Array.isArray(extracted.facts) ? extracted.facts.filter((f) => f?.trim()) : [];
+  for (const f of facts) {
+    await addDiscrete(f, "fact");
+  }
+
+  // Discrete lessons — each becomes its own memory
+  const lessons = Array.isArray(extracted.lessons) ? extracted.lessons.filter((l) => l?.trim()) : [];
+  for (const l of lessons) {
+    await addDiscrete(l, "lesson");
+  }
+
+  // Code snippets — grouped as one memory (they're usually small and related)
+  const codeSnippets = Array.isArray(extracted.codeSnippets) ? extracted.codeSnippets.filter((s) => s?.trim()) : [];
+  if (codeSnippets.length > 0) {
+    await addDiscrete(codeSnippets.map((s, i) => `${i + 1}. ${s}`).join("\n"), "code");
+  }
+
+  console.log(`[opencode-mem-decision] created ${createdCount} discrete memories from extraction`);
+
+  return {
+    action: createdCount > 0 ? "add" : "skip",
+    ids: createdIds,
+    count: createdCount,
+    discrete: true,
+  };
 }

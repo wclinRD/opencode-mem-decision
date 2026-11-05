@@ -261,8 +261,23 @@ export default Plugin.define({
     const embeddingService = new EmbeddingService(memoryConfig);
     setEmbeddingService(embeddingService);
 
-    // Initialize extraction service
-    const extractionService = new ExtractionService(memoryConfig);
+    // Initialize extraction service with generateFn
+    let generateFn = null;
+    if (ctx.session?.generate) {
+      generateFn = async (sessionID, prompt) => {
+        try {
+          const result = await ctx.session.generate({ sessionID, prompt });
+          return result?.text || result?.content || "";
+        } catch (e) {
+          console.error(`[opencode-mem-decision] generateFn failed for session ${sessionID}: ${e.message}`);
+          return "";
+        }
+      };
+    }
+    const extractionService = new ExtractionService({
+      ...memoryConfig,
+      generateFn,
+    });
 
     if (backend === "markdown") {
       console.log("[opencode-mem-decision] using Markdown Vault backend");
@@ -401,6 +416,7 @@ export default Plugin.define({
               storage,
               classifyMemory: () => classified,
               extractionService,
+              extractionSessionID: sessionID,
             });
             console.log(`[opencode-mem-decision] auto-capture action:`, action);
           }
