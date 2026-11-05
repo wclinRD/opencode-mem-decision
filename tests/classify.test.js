@@ -39,3 +39,21 @@ test("classifyMemory - detects sensitive content", () => {
 test("looksSensitive - matches emails and keys", () => {
   assert.ok(looksSensitive("Contact is test@example.com and key is sk-12345678901234567890123456789012"));
 });
+
+test("classifyMemory - extracts dynamic tags for task and rules", () => {
+  const task = classifyMemory("How to deploy Next.js and Nuxt app with Vercel.");
+  assert.equal(task.type, "task");
+  assert.ok(task.tags.includes("howto"), "should include howto");
+  assert.ok(task.tags.includes("nextjs"), "should include nextjs");
+  assert.ok(task.tags.includes("vercel"), "should include vercel");
+
+  const rule = classifyMemory("The policy requires JWT authentication for all APIs.");
+  assert.equal(rule.type, "rule");
+  assert.ok(rule.tags.includes("policy"), "should include policy");
+  assert.ok(rule.tags.includes("jwt"), "should include jwt");
+
+  const lesson = classifyMemory("Error E401 occurred when calling the service");
+  assert.equal(lesson.type, "lesson");
+  assert.ok(lesson.tags.includes("debug"), "should include debug");
+  assert.ok(lesson.tags.some(t => t.includes("e401") || t.includes("401")), "should include error keyword");
+});

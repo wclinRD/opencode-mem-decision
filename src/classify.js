@@ -78,16 +78,72 @@ export function classifyMemory(text) {
   return { type, confidence, sensitive, priority, tags };
 }
 
-function extractTags(text, type) {
-  const tags = new Set();
-  if (type === "fact") {
-    const techMatches = text.match(/\b(?:React|Vue|Svelte|Angular|Node|Express|Fastify|Python|TypeScript|JavaScript|Go|Rust|Docker|Kubernetes|AWS|GCP|Azure|PostgreSQL|Redis|MongoDB|Prisma|Tauri|Capacitor|Electron)\b/gi);
-    if (techMatches) {
-      techMatches.forEach((t) => tags.add(t.toLowerCase()));
+const TECH_VOCAB = new Set([
+  "react", "vue", "svelte", "angular", "node", "express", "fastify",
+  "python", "typescript", "javascript", "go", "rust", "java", "csharp",
+  "docker", "kubernetes", "aws", "gcp", "azure", "postgresql", "redis",
+  "mongodb", "prisma", "tauri", "capacitor", "electron", "nextjs", "nuxt",
+  "sveltekit", "astro", "deno", "bun", "supabase", "vercel", "netlify",
+  "graphql", "rest", "grpc", "oauth", "jwt", "saml", "sso", "openid",
+  "wasm", "neon", "deno", "bun", "turborepo", "monorepo", "microservice",
+  "serverless", "lamdba", "cloudflare", "cloudfront", "cloudfunction",
+  "terraform", "ansible", "puppet", "chef", "vault", "secretsmanager",
+  "prometheus", "grafana", "opentelemetry", "kibana", "logstash", "filebeat",
+  "mysql", "sqlite", "mariadb", "influxdb", "cassandra", "elasticsearch",
+  "kafka", "rabbitmq", "redis", "memcached", "solr", "mongodb",
+]);
+
+function extractTechTerms(text) {
+  const terms = new Set();
+  const lower = text.toLowerCase();
+  const normalized = lower.replace(/[\.\-]/g, "");
+  for (const term of TECH_VOCAB) {
+    if (normalized.includes(term.replace(/[\.\-]/g, ""))) terms.add(term);
+  }
+  // camelCase words and acronyms (>=3 chars, at least 2 lowercase letters)
+  const wordMatches = text.match(/[a-zA-Z]{3,}/g) || [];
+  for (const w of wordMatches) {
+    if (/[a-z]{2,}/.test(w) && /[A-Z]/.test(w) && w.length < 30) {
+      terms.add(w.toLowerCase().replace(/[\.\-]/g, ""));
     }
   }
-  if (type === "lesson" && /error|bug|fix/i.test(text)) tags.add("debug");
-  if (type === "preference" && /language|中文|Traditional Chinese/i.test(text)) tags.add("language");
-  if (tags.size > 0) return Array.from(tags).slice(0, 3);
-  return [];
+  // version-like identifiers
+  const versionMatches = text.match(/(?:v|ver)[.\d]+/gi) || [];
+  for (const v of versionMatches) terms.add(v.toLowerCase());
+  return Array.from(terms).slice(0, 5);
+}
+
+function extractErrorKeywords(text) {
+  const errs = text.match(/\b(?:ERR_?[A-Z_0-9]+|E\d{4}|4\d{2}|5\d{2}|invalid|unauthorized|forbidden|timeout|failed|error)[^\n]*/gi) || [];
+  return Array.from(new Set(errs.map(e => e.toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 20)))).slice(0, 3);
+}
+
+function extractTags(text, type) {
+  const tags = [];
+
+  if (type === "lesson") {
+    if (/error|bug|fix|fail|debug|root cause/i.test(text)) tags.push("debug");
+    if (/mistake|learned|lesson/i.test(text)) tags.push("lesson");
+  } else if (type === "task") {
+    tags.push("howto");
+    if (/workflow|procedure|setup|steps/i.test(text)) tags.push("workflow");
+  } else if (type === "preference") {
+    if (/language|中文|Traditional Chinese|繁體中文/i.test(text)) tags.push("language");
+    if (/prefer|always|never/i.test(text)) tags.push("preference");
+  } else if (type === "rule") {
+    tags.push("rule");
+    if (/must|require|enforce/i.test(text)) tags.push("policy");
+  }
+
+  const techTerms = extractTechTerms(text);
+  for (const t of techTerms) {
+    if (!tags.includes(t)) tags.push(t);
+  }
+
+  const errorKeywords = extractErrorKeywords(text);
+  for (const e of errorKeywords) {
+    if (!tags.includes(e)) tags.push(e);
+  }
+
+  return tags.slice(0, 5);
 }
