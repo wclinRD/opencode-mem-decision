@@ -22,11 +22,11 @@
 - [x] Ensure backward compatibility with existing `search` and `list`
 
 ## Phase 4: Layered Storage Implementation
-- [ ] Introduce Base Memory, Summary Node, Category/Principle Node schemas
-- [ ] Extend storage API to manage graph edges and summary nodes
-- [ ] Update `addMemory` to build/update hierarchy on insert
-- [ ] Update `searchMemories` to use layered nodes when applicable
-- [ ] Add migration path for existing flat memories
+- [x] Introduce Base Memory, Summary Node, Category/Principle Node schemas
+- [x] Extend storage API to manage graph edges and summary nodes
+- [x] Update `addMemory` to build/update hierarchy on insert
+- [x] Update `searchMemories` to use layered nodes when applicable
+- [x] Add migration path for existing flat memories
 
 ## Phase 5: Capture Flow Optimization
 - [ ] Pre-filter raw session text for noise removal
@@ -51,4 +51,5 @@
 - Phase 1 committed: `c8e0637`
 - Phase 2 committed: `bd73e05`
 - Phase 3 core routing integrated into retrieval flow.
-- Phase 4–6 pending implementation and testing.
+- Phase 4 committed: `fe50a97` layered storage schemas and dual-route integration.
+- Phase 5–6 pending implementation and testing.
