@@ -5,6 +5,7 @@ import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory as defaultClassifyMemory } from "./classify.js";
 import { loadConfig } from "./config.js";
 import { resolveProjectShared } from "./projectShared.js";
+import path from "path";
 
 const simHash = (text) => {
   const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
@@ -23,6 +24,19 @@ function normalizeText(text) {
     .replace(/["'`.:;!?()[\]{}.,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function deriveSessionDirFromMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  const latest = messages[messages.length - 1];
+  const files = latest?.files || latest?.parts?.find((p) => p?.type === "text")?.files || [];
+  const firstFile = files.find((f) => f?.uri && f.uri.startsWith("file://"));
+  if (firstFile) {
+    const uri = firstFile.uri;
+    const clean = uri.startsWith("file://") ? uri.slice(7) : uri;
+    return path.dirname(clean);
+  }
+  return null;
 }
 
 export function calculateSimilarity(a, b) {
@@ -126,7 +140,8 @@ export async function autoCapture({ sessionData, memoryConfig, storage, classify
   });
 
   const duplicateConfig = memoryConfig.duplicateDetection || { enabled: true, similarityThreshold: 0.75, updateOnMatch: true };
-  const projectShared = await resolveProjectShared({ memoryConfig, cwd: process.cwd() });
+  const sessionDir = deriveSessionDirFromMessages(sessionData?.messages || []);
+  const projectShared = await resolveProjectShared({ memoryConfig, cwd: sessionDir || process.cwd() });
   const projectTag = projectShared ? [projectShared.projectName] : [];
   const memory = await storage.addMemory(
     redactCredentials(filtered),

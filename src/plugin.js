@@ -163,6 +163,32 @@ function sessionText(messages) {
   return parts.join("\n");
 }
 
+function resolveDynamicCwdFromPrompt(event) {
+  const prompt = event?.prompt;
+  if (prompt?.directory) return prompt.directory;
+  const files = prompt?.files || [];
+  const firstFile = files.find((f) => f?.uri && f.uri.startsWith("file://"));
+  if (firstFile) {
+    const uri = firstFile.uri;
+    const clean = uri.startsWith("file://") ? uri.slice(7) : uri;
+    return path.dirname(clean);
+  }
+  return null;
+}
+
+function deriveSessionDirFromMessages(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+  const latest = messages[messages.length - 1];
+  const files = latest?.files || latest?.parts?.find((p) => p?.type === "text")?.files || [];
+  const firstFile = files.find((f) => f?.uri && f.uri.startsWith("file://"));
+  if (firstFile) {
+    const uri = firstFile.uri;
+    const clean = uri.startsWith("file://") ? uri.slice(7) : uri;
+    return path.dirname(clean);
+  }
+  return null;
+}
+
 export default Plugin.define({
   id: "opencode-mem-decision",
   async setup(ctx) {
@@ -208,21 +234,15 @@ export default Plugin.define({
       }
     }
 
-    // Resolve active project at plugin setup time.
-    let activeProject = null;
-    try {
-      activeProject = await resolveProjectShared({ memoryConfig, cwd: process.cwd() });
-    } catch (error) {
-      console.error(`[opencode-mem-decision] failed to resolve project marker: ${error.message}`);
-    }
-
     await ctx.tool.transform((editor) => {
       editor.add({
         name: "memory",
         description: "Manage cross-session memories and knowledge",
         input: MEMORY_TOOL_INPUT,
-        execute: async (input) =>
-          toToolResult(await runMemoryMode(input || {}, { storage, memoryConfig, activeProject })),
+        execute: async (input) => {
+          const activeProject = await resolveProjectShared({ memoryConfig, cwd: process.cwd() }).catch(() => null);
+          return toToolResult(await runMemoryMode(input || {}, { storage, memoryConfig, activeProject }));
+        },
       });
     });
 
@@ -241,6 +261,20 @@ export default Plugin.define({
           if (event.prompt.text.includes(INJECTION_MARKER)) {
             injectedSessions.add(sessionID);
             return;
+          }
+        }
+
+        const promptCwd = resolveDynamicCwdFromPrompt(event);
+        let activeProject = null;
+        if (promptCwd) {
+          activeProject = await resolveProjectShared({ memoryConfig, cwd: promptCwd }).catch(() => null);
+        } else {
+          try {
+            const messages = await ctx.session.context({ sessionID });
+            const sessionDir = deriveSessionDirFromMessages(messages);
+            activeProject = await resolveProjectShared({ memoryConfig, cwd: sessionDir || process.cwd() }).catch(() => null);
+          } catch (error) {
+            console.error(`[opencode-mem-decision] session context failed: ${error?.message || error}`);
           }
         }
 
