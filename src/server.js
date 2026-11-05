@@ -169,6 +169,11 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
       } else if (path.match(/^\/api\/memory\/[^/]+$/) && method === "DELETE") {
         const id = path.split("/").pop();
         sendJson(res, 200, { deleted: await storage.deleteMemory(id) });
+      } else if (path === "/api/memory/optimize" && method === "POST") {
+        const body = await parseBody(req);
+        const scope = body.scope || "default";
+        const result = await storage.optimizeMemories(scope);
+        sendJson(res, 200, result);
       } else if (path === "/api/profile" && method === "GET") {
         sendJson(res, 200, await buildProfile({ memoryConfig, storage }));
       } else if (path === "/api/dream" && method === "POST") {
