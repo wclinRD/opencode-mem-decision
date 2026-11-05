@@ -526,6 +526,14 @@ grep "opencode-mem-decision" ~/.local/share/opencode/log/opencode.log | tail
 - [x] `src/server.js` 實作 `GET /api/skills`、`GET /api/skills/search`、`POST /api/skills`、`DELETE /api/skills`、`DELETE /api/skills/:id` 等 REST 路由。
 - [x] 測試：`tests/skills.test.js`（3 個測試），全部 92/92 通過。
 
+## Memory 整理功能（2026-11-05）
+
+- [x] `src/storage/local.js`：新增 `optimizeMemories(scope)`，針對 JSON database 記憶依規範化內容（小寫化與空白統一）分組，依 `confidence` 降序，相同 confidence 依 `updatedAt` 降序，保留一筆最符合的記憶，刪除其他重複記憶，回傳 `{ deletedCount, keptCount }`。
+- [x] `src/storage/markdown.js`：對應 markdown vault/project 實現 `optimizeMemories(scope)`，列出 `.md` 文件，依內容分組，保留最佳筆後刪除其他 `.md` 文件，回傳 `{ deletedCount, keptCount }`。
+- [x] `src/server.js`：新增 `POST /api/memory/optimize`，接受 `{ scope }`，回傳整理結果。
+- [x] `src/static/ui.html`：於 Memories 控制列加入「Optimize Memory」按鈕，選擇 scope 後二次確認，呼叫後端 API，然後重新載入記憶列表與統計。
+- [x] 全部測試通過：94/94。
+
 ## 下一步
 
 1. 確認功能模組清單無誤。
