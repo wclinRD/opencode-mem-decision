@@ -63,18 +63,27 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - Fixed prompt hook tests by ensuring memory scope matches default recall scope and injection filters don't overfilter.
 - All 107 tests currently pass.
 
+## Phase 8: Knowledge Base Search and Swift SDK Ingestion
+- Added `searchKnowledge(query)` with token scoring and `importKnowledgeFromDirectory(dir)` to import markdown/SwiftUI files into the knowledge base.
+- Exposed `knowledge-search` and `knowledge-import` modes in the memory tool for CLI and tool use.
+- Added POST `/api/knowledge/search` route in the web server for knowledge search.
+- Added unit tests for `searchKnowledge` and `importKnowledgeFromDirectory`; all 109 tests pass.
+- Ingested Swift UIKit basics and modifier patterns from `doc/swift/*.md` into the knowledge base for future Swift UI/app development.
+
 ## Key Files Changed
 - `src/classify.js`: dynamic tagging and weighted confidence functions.
 - `src/organize.js`: BM25 text similarity and graph construction.
-- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support.
+- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, and exported tokenize function.
 - `src/retrieval.js`: dual-route retrieval simulation and BM25 scoring.
 - `src/capture.js`: session filtering, summarization, sensitive detection, and noise heuristic `isGenericOrNoiseText`.
 - `src/inject.js`: context-aware splitting, fallback retrieval, injection formatting, and candidate filtering with default confidence/type fallbacks.
-- `src/plugin.js`: tool schema and injection integration with memory modes.
+- `src/plugin.js`: tool schema and injection integration with memory modes; added knowledge-search and knowledge-import modes.
+- `src/tools/memoryTools.js`: knowledge tool schema extended with search and import modes.
+- `src/server.js`: memory and stats endpoints use noise-excluded memory listing; added POST `/api/knowledge/search`.
 - `src/config.js`: new `fallbackRetrieval` default option; updated `recallScope` default to `"default"`.
-- `src/server.js`: memory and stats endpoints use noise-excluded memory listing.
-- `tests/storage.test.js`, `tests/capture.test.js`, `tests/organize.test.js`: new unit tests for new features.
+- `tests/storage.test.js`: added unit tests for `searchKnowledge` and `importKnowledgeFromDirectory`.
 - `tests/inject.test.js`, `tests/plugin.test.js`: updated injection and prompt hook tests for default scope behavior.
+- `doc/swift/*.md`: sample Swift UI basics and modifiers documentation ingested into the knowledge base.
 
 ## Verification & Policy
 - All 107 tests pass in current state.

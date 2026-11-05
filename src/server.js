@@ -104,6 +104,11 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         sendJson(res, 200, await storage.listMemories(undefined, "default", defaultConfig, { excludeNoise: true }));
       } else if (path === "/api/knowledge" && method === "GET") {
         sendJson(res, 200, await storage.listKnowledge());
+      } else if (path === "/api/knowledge/search" && method === "POST") {
+        const body = await parseBody(req);
+        const query = body?.query || "";
+        const limit = Math.min(50, Math.max(1, body?.limit || 20));
+        sendJson(res, 200, await storage.searchKnowledge(query, { limit }));
       } else if (path.match(/^\/api\/knowledge\/[^/]+$/) && method === "DELETE") {
         const id = path.split("/").pop();
         sendJson(res, 200, { deleted: await storage.deleteKnowledge(id) });

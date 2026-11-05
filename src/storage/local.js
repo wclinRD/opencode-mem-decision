@@ -182,8 +182,8 @@ export async function addMemory(content, scope = "project", sessionId, metadata 
   return memory;
 }
 
-function tokenize(text) {
-  return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+export function tokenize(text) {
+  return String(text ?? "").toLowerCase().match(/[a-z0-9_-]+/g) || [];
 }
 
 export function getTtlDaysForMemory(memory, config) {
@@ -777,6 +777,44 @@ export async function deleteKnowledge(id) {
   return false;
 }
 
+export async function searchKnowledge(query, filters = {}) {
+  const filePath = path.join(getStorageDir(), KNOWLEDGE_FILE);
+  const db = await readJsonFile(filePath);
+  const knowledge = db.knowledge || [];
+
+  const queryTokens = query ? [...new Set(tokenize(query))] : [];
+  if (!queryTokens.length) {
+    return knowledge.slice(0, filters.limit || 20);
+  }
+
+  const nowMs = Date.now();
+  return knowledge
+    .map((item) => {
+      const textTokens = new Set(tokenize(item.content));
+      const matchCount = queryTokens.reduce((total, token) => total + (textTokens.has(token) ? 1 : 0), 0);
+      const recencyFactor = item.updatedAt ? Math.max(0, 1 - (nowMs - Date.parse(item.updatedAt)) / (30 * 86400000)) : 1;
+      const score = matchCount > 0 ? matchCount + 0.5 * recencyFactor : 0;
+      return { item, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, filters.limit || 20)
+    .map((entry) => entry.item);
+}
+
+export async function importKnowledgeFromDirectory(dir) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const textOrMarkdown = entries.filter((e) => e.isFile() && /\.(md|txt|swift|swiftui)$/i.test(e.name));
+  const results = [];
+  for (const entry of textOrMarkdown) {
+    const content = await fs.readFile(path.join(dir, entry.name), "utf-8");
+    const id = `swift_sdk_${entry.name.replace(/[^a-z0-9._-]/gi, "_")}`;
+    const knowledge = await addKnowledge(content, id);
+    results.push(knowledge.id);
+  }
+  return results;
+}
+
 export const localStorage = {
   addMemory,
   searchMemories,
@@ -796,6 +834,8 @@ export const localStorage = {
   listKnowledge,
   getKnowledge,
   deleteKnowledge,
+  searchKnowledge,
+  importKnowledgeFromDirectory,
   cleanupExpiredMemories,
   cleanupTrash,
   getTtlDaysForMemory,

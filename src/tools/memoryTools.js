@@ -223,6 +223,26 @@ export function registerKnowledgeTools({ tools, storage, memoryConfig }) {
           return storage.deleteKnowledge(id);
         },
       },
+      search: {
+        description: "Search knowledge base by query",
+        parameters: {
+          query: { type: "string", description: "Search query" },
+          limit: { type: "integer", description: "Maximum results", minimum: 1, maximum: 50 },
+        },
+        handler: async ({ query, limit = 20 }) => {
+          return storage.searchKnowledge(query, { limit });
+        },
+      },
+      import: {
+        description: "Import knowledge from a directory of text or markdown files",
+        parameters: {
+          directory: { type: "string", description: "Directory containing documentation files" },
+        },
+        handler: async ({ directory }) => {
+          const { importKnowledgeFromDirectory } = await import("../storage/local.js");
+          return importKnowledgeFromDirectory(directory || process.cwd());
+        },
+      },
     },
   });
 }

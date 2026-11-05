@@ -120,6 +120,26 @@ test("storage - deleteKnowledge", async () => {
   assert.equal(retrieved, null);
 });
 
+test("storage - searchKnowledge matches query terms", async () => {
+  await localStorage.addKnowledge("SwiftUI View lifecycle and State management", "kb_swift");
+  const results = await localStorage.searchKnowledge("SwiftUI view state");
+  assert.ok(results.length >= 1);
+  assert.ok(results[0].id === "kb_swift");
+});
+
+test("storage - importKnowledgeFromDirectory imports markdown", async () => {
+  const testDir = path.join(os.tmpdir(), `swift-knowledge-import-${process.pid}`);
+  await fs.mkdir(testDir, { recursive: true });
+  await fs.writeFile(path.join(testDir, "doc1.md"), "# Swift UI basics\nContent about views and State.");
+
+  const imported = await localStorage.importKnowledgeFromDirectory(testDir);
+  assert.ok(imported.length >= 1);
+  const found = await localStorage.searchKnowledge("Swift UI basics");
+  assert.ok(found.length >= 1);
+
+  await fs.rm(testDir, { recursive: true, force: true });
+});
+
 test("storage - profile builder writes profile.json in the temp dir", async () => {
   await localStorage.addMemory("Deploys use Fly.io", "project");
   await localStorage.addMemory("Prefer pnpm over npm", "global");

@@ -24,7 +24,7 @@ const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
   "export", "import", "list-shards", "dream", "restore-trash",
   "organize", "retrieve",
-  "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete",
+  "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete", "knowledge-search", "knowledge-import",
   "skill-list", "skill-show", "skill-save", "skill-delete",
 ];
 
@@ -109,6 +109,12 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
     if (km === "show") return storage.getKnowledge(args.id);
     if (km === "save") return storage.addKnowledge(args.content, args.id);
     if (km === "delete") return storage.deleteKnowledge(args.id);
+    if (km === "search") return storage.searchKnowledge(args.query, { limit: args.limit });
+    if (km === "import") {
+      const { importKnowledgeFromDirectory } = await import("./storage/local.js");
+      const dir = args.directory || process.cwd();
+      return importKnowledgeFromDirectory(dir);
+    }
     throw new Error(`Unknown knowledge mode: ${km}`);
   }
 
