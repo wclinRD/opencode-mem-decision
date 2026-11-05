@@ -60,3 +60,28 @@ export async function createProjectMarker(cwd, projectName) {
   await fs.writeFile(markerFile, `${content}\n`, "utf8");
   return { projectDir: cwd, markerFileName: config.markerFileName, projectName: content };
 }
+
+// Read project-level tech keywords from package.json or source file patterns.
+export async function resolveProjectContext(projectRoot) {
+  const shared = await resolveProjectShared({ memoryConfig: { projectShared: { enabled: true } }, cwd: projectRoot });
+  if (!shared) return null;
+  const keywords = [];
+  try {
+    const pkg = await fs.readFile(path.join(projectRoot, "package.json"), "utf8").catch(() => null);
+    if (pkg) {
+      const data = JSON.parse(pkg);
+      const deps = { ...(data.dependencies || {}), ...(data.devDependencies || {}) };
+      for (const dep of Object.keys(deps)) {
+        keywords.push(...dep.split("/"));
+      }
+      if (data.engines && data.engines.node) keywords.push("node");
+    }
+  } catch {
+    // ignore package.json errors
+  }
+  return {
+    projectDir: shared.projectDir,
+    projectName: shared.projectName,
+    keywords: Array.from(new Set(keywords)).filter((k) => k.length > 0),
+  };
+}

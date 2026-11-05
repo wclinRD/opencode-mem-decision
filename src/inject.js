@@ -2,6 +2,8 @@ import { searchMemories, listMemories, buildGraphAndPersist } from "./storage/lo
 import { loadConfig } from "./config.js";
 import { simulateDualRouteRetrieve } from "./retrieval.js";
 import { isGenericOrNoiseText } from "./capture.js";
+import { attachProjectContext } from "./retrieval.js";
+import { resolveProjectContext } from "./projectShared.js";
 
 export const INJECTION_MARKER = "<!-- opencode-mem-decision:injected -->";
 
@@ -110,17 +112,22 @@ export async function injectMemories({
     }
   }
 
+  const projectContext = activeProject?.projectName
+    ? await resolveProjectContext(activeProject.projectDir).catch(() => null)
+    : null;
   const filtered = candidates
     .filter((m) => Number(m.confidence || 0.5) >= 0.5)
     .filter((m) => (m.type || "unknown") !== "noise")
     .filter((m) => !isGenericOrNoiseText(m.content))
     .slice(0, maxMemories);
 
+  const contexted = projectContext ? attachProjectContext(filtered, projectContext) : filtered;
+
   if (memoryConfig.chatMessage.filterInjectedPrompts) {
-    return filtered.filter((m) => !isSystemPrompt(m.content));
+    return contexted.filter((m) => !isSystemPrompt(m.content));
   }
 
-  return filtered.filter((m) => m.sensitivity !== "sensitive");
+  return contexted.filter((m) => m.sensitivity !== "sensitive");
 }
 
 function isSystemPrompt(content) {

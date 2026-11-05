@@ -142,6 +142,7 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         const query = url.searchParams.get("query") || "";
         const scope = url.searchParams.get("scope") || "default";
         const project = url.searchParams.get("project") || null;
+        const projectRoot = url.searchParams.get("projectRoot") || null;
         const effectiveScope = project ? `project:${project}` : scope;
         const type = url.searchParams.get("type") || "all";
         const confidence = url.searchParams.get("confidence");
@@ -154,7 +155,16 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         if (timeRange) filters.timeRange = Number(timeRange);
         if (ttlDays) filters.ttlDays = Number(ttlDays);
         filters.includeExpired = includeExpired;
-        sendJson(res, 200, await storage.searchMemories(query, filters));
+        const defaultConfig = loadConfig();
+        let results = await storage.searchMemories(query, filters);
+        if (projectRoot) {
+          const { resolveProjectContext } = await import("./projectShared.js");
+          const projectContext = await resolveProjectContext(projectRoot).catch(() => null);
+          if (projectContext) {
+            results = await storage.searchMemoriesLayered(query, { ...filters, projectContext });
+          }
+        }
+        sendJson(res, 200, results);
       } else if (path === "/api/events/summary" && method === "GET") {
         const hours = url.searchParams.get("hours") || 24;
         sendJson(res, 200, await summarizeRecentEvents({ hours: Number(hours) }));
@@ -198,10 +208,27 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         const body = await parseBody(req);
         const query = body.query || "";
         const scope = body.scope || "default";
+        const projectRoot = body.projectRoot;
         const filters = body.filters || {};
-        const memories = await storage.searchMemories("", { scope, includeExpired: true });
-        const graphData = await loadGraph();
-        const result = simulateDualRouteRetrieve(query, memories, graphData, filters);
+        let result;
+        if (projectRoot) {
+          const { resolveProjectContext } = await import("./projectShared.js");
+          const projectContext = await resolveProjectContext(projectRoot).catch(() => null);
+          const layeredFilter = filters?.layered || filters?.useGraph ? { layered: true, useGraph: true } : null;
+          if (layeredFilter) {
+            result = await storage.searchMemoriesLayered(query, { ...layeredFilter, scope, includeExpired: true, projectContext });
+          } else {
+            result = await storage.searchMemories(query, { scope, includeExpired: true });
+            if (projectContext) {
+              const { attachProjectContext } = await import("./retrieval.js");
+              result = attachProjectContext(result, projectContext);
+            }
+          }
+        } else {
+          const memories = await storage.searchMemories("", { scope, includeExpired: true });
+          const graphData = await loadGraph();
+          result = simulateDualRouteRetrieve(query, memories, graphData, filters);
+        }
         sendJson(res, 200, result);
       } else if (path === "/api/memory/utility" && method === "GET") {
         const defaultConfig = loadConfig();

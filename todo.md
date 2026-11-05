@@ -86,6 +86,66 @@
 - [ ] 更新 `doc/handover.md`。
 - [ ] 同步 `src/static/ui.html` 至全局 plugin。
 
+### Step 6：HybridTagGraph Memory（靜態標籤分組＋動態分層/圖檢索）
+
+- [ ] 研究靜態標籤分組與動態分層/圖檢索的最新演算法（Mnemis、MemTree、TagRAG、TAGGRAPH）。
+- [ ] 定義記憶分層模型：Base Memory（原始）、Summary Node（摘要）、Principle/Category Node（分類抽象）。
+- [ ] 實作 `src/organize.js`：
+  - [ ] 生成 Base / Summary / Category 節點並建立 adjacency graph。
+  - [ ] 支援 tag overlap / keyword 相似度建邊。
+  - [ ] 支援時間邊（temporal edges）。
+- [ ] 實作 `src/retrieval.js`：
+  - [ ] System-1 Similarity Search（tags + keyword/vector similarity）。
+  - [ ] System-2 Global Selection（沿 hierarchy 遍歷取相關社群與原始記憶）。
+- [ ] 實作 `src/storage/graph.js`：圖結構 JSON/Markdown 儲存與載入。
+- [ ] 更新 `src/static/ui.html`：增加「Organize Memory」section，顯示分層組織與檢索結果。
+- [ ] 實作 `POST /api/memory/organize` 與 `POST /api/memory/retrieve`。
+- [ ] 補充測試（`organize.test.js`、`retrieval.test.js`、`graph.test.js`）。
+- [ ] 更新 `doc/handover.md`。
+- [ ] 同步 `src/static/ui.html` 至全局 plugin。
+
+### Step 8：記憶效用分數與 TTL 動態調整
+
+- [ ] 實作 `calculateMemoryUtilityScore(memory)` 綜合分數（content length, type, tags, usage count, recency）。
+- [ ] 在 `getTtlDaysForMemory` 加入 utility 分數反比調整 TTL。
+- [ ] 新增 `memory.utility` tool 與 `/api/memory/utility` endpoint.
+- [ ] 測試：`tests/utility.test.js`，含分數計算與 TTL 動態計算。
+
+### Step 9：情境化檢索與專案上下文整合
+
+- [ ] 實作 `resolveProjectContext(projectRoot)` 讀取 `.opencode-mem-project` 或当前 project。
+- [ ] 更新 `searchMemoriesLayered` 與 `injectMemories` 加入 project context 權重。
+- [ ] 實作 `attachProjectContext(memories, projectRoot)` 對記憶附加專案相關性分數。
+- [ ] 在 `/api/memory/search` 與 `/api/memory/inject` 支援 `projectRoot` filter。
+- [ ] 更新 UI：「Contextual Search」與 project filter。
+- [ ] 測試：`tests/contextual.test.js`，驗證 project context 提升 recall。
+
+### Step 10：分組與去重合併流程與 UI 更新
+
+- [ ] 將 `organizeMemoriesWithLLM` 與 `optimizeMemories` 合併為 `optimizeAndGroupMemories` 單一流程，先分群後去重。
+- [ ] 實作 `src/storage/local.js::optimizeAndGroupMemories(scope, threshold)` 返回 grouped + merged reports。
+- [ ] 更新 `/api/memory/optimize` endpoint 與 UI 按鈕，顯示合併後分組與剩餘唯一記憶。
+- [ ] 更新 `src/static/ui.html` 的分組去重介面，合併「分組」與「去重」tab 為單一「Optimize Memory」區域。
+- [ ] 測試：`tests/optimize.test.js`，涵蓋分群＋去重流程。
+
+### Step 11：圖索引與儲存資料同步優化
+
+- [ ] 實作 `syncGraphToStorage(graph, storageDb)` 確保圖索引與記憶庫節點一致。
+- [ ] 在 `addMemory`/`updateMemory`/`deleteMemory` 觸發同步。
+- [ ] 優化圖更新為增量加邊/删邊，避免全量重建。
+- [ ] 實作 `rebuildGraphIndexIfStale(db, graph)`。
+- [ ] 更新 `src/storage/graph.js` 與 `local.js` 的同步流程。
+- [ ] 測試：`tests/graph-sync.test.js`，驗證同步與增量更新。
+
+### Step 12：效能基準與使用追蹤，更新手冊
+
+- [ ] 實作 `src/perf.js`：記錄 recall/precision, latency, injection hits/misses。
+- [ ] 新增 `memory.benchmark` custom tool與 `/api/memory/benchmark` endpoint。
+- [ ] 實作 `src/tracking.js` 記錄記憶生成、檢索與刪除使用次數。
+- [ ] 更新 `doc/handover.md` 完整報告所有 Phase。
+- [ ] 補充整體基準測試報告與 `tests/perf.test.js`。
+- [ ] 最終 commit 並 push。
+
 ### Step 7：後續高階整合（Phase 2，可选）
 
 - [ ] 整合 vector embedding（遠端 API / Hugging Face / local stub）。

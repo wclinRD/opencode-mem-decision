@@ -258,6 +258,10 @@
       color: var(--primary);
       border-color: var(--primary);
     }
+    .pill.project-context {
+      color: var(--success);
+      border-color: var(--success);
+    }
     .time-row {
       font-size: 11px;
       color: var(--muted);
@@ -397,10 +401,18 @@
           <option value="desc">Newest first</option>
           <option value="asc">Oldest first</option>
         </select>
+        <input id="contextProjectRoot" type="text" placeholder="Project root for context (optional)" />
+        <button id="contextSearchButton" class="secondary">Contextual Search</button>
         <button id="searchButton" class="secondary">Search</button>
         <button id="optimizeMemoryButton" class="secondary">Optimize Memory</button>
         <button id="digestMemoryButton" class="secondary">Digest Memories</button>
         <button id="deleteAllFilterButton" class="danger" disabled>Delete All by Filter</button>
+      </div>
+
+      <div id="contextualSearchResults" style="display:none; margin-bottom:16px;">
+        <h3 class="section-title">Contextual Search Results</h3>
+        <div id="contextualSummary" class="meta"></div>
+        <div id="contextualMemoryList" class="grid"></div>
       </div>
 
       <div id="digestResults" style="display:none; margin-bottom:16px;">
@@ -706,6 +718,45 @@
       }
     }
 
+    function renderContextualMemories(data) {
+      const list = document.getElementById("contextualMemoryList");
+      list.innerHTML = "";
+      if (!data || !data.length) {
+        list.innerHTML = `<div class="empty">No contextual memories found.</div>`;
+        return;
+      }
+      data.forEach((m) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const conf = Number(m.confidence || 0.5);
+        const confClass = conf >= 0.8 ? "conf-high" : conf >= 0.5 ? "conf-medium" : "conf-low";
+        const sensClass = (m.sensitivity || "normal").toLowerCase();
+        const priorityClass = m.priority === 2 ? "conf-high" : m.priority === 1 ? "conf-medium" : "conf-low";
+        const priorityLabel = m.priority === 2 ? "high" : m.priority === 1 ? "medium" : "low";
+        const projScore = m.projectContextScore !== undefined ? Number(m.projectContextScore).toFixed(2) : "n/a";
+        card.innerHTML = `
+          <h3>${escapeHtml(m.id)}</h3>
+          <div class="card-content">${escapeHtml(m.content)}</div>
+          <div class="meta">
+            <span class="pill">${escapeHtml(m.scope || "default")}</span>
+            ${m.projectName ? `<span class="pill project-pill">${escapeHtml(m.projectName)}</span>` : ""}
+            <span class="pill" data-type="${escapeHtml(m.type || 'fact')}">${escapeHtml(m.type || "fact")}</span>
+            <span class="pill ${confClass}" data-conf="${escapeHtml(m.confidence || 0.5)}">${conf.toFixed(2)}</span>
+            <span class="pill sensitivity-${sensClass}">${escapeHtml(m.sensitivity || "normal")}</span>
+            <span class="pill ${priorityClass}">${priorityLabel}</span>
+            <span class="pill project-context">Project Context: ${escapeHtml(projScore)}</span>
+            ${m.tags?.length ? `<span class="pill">tags: ${escapeHtml(m.tags.join(", "))}</span>` : ""}
+          </div>
+          <div class="time-row">created: ${formatLocalTime(m.createdAt)} · updated: ${formatLocalTime(m.updatedAt)}</div>
+          <div class="actions">
+            <button class="danger" data-id="${escapeHtml(m.id)}">Delete</button>
+          </div>
+        `;
+        card.querySelector("button").addEventListener("click", () => deleteMemory(m.id));
+        list.appendChild(card);
+      });
+    }
+
     async function addMemory(content, scope = "project", project = "current") {
       const payload = { content, scope };
       if (project && project !== "current") payload.project = project;
@@ -741,6 +792,20 @@
     document.getElementById("searchButton").addEventListener("click", () => {
       const q = document.getElementById("searchInput").value.trim();
       loadMemories(q || null);
+    });
+    document.getElementById("contextSearchButton").addEventListener("click", async () => {
+      const q = document.getElementById("searchInput").value.trim();
+      const projectRoot = document.getElementById("contextProjectRoot").value.trim();
+      if (!q && !projectRoot) {
+        toast("Enter a query or project root for contextual search.", "info");
+        return;
+      }
+      showView("memories");
+      const params = new URLSearchParams({ query: q, projectRoot });
+      const results = await request("/memory/search?" + params.toString(), { method: "GET" });
+      document.getElementById("contextualSearchResults").style.display = "block";
+      document.getElementById("contextualSummary").textContent = `Contextual search for query "${q}" with project root "${projectRoot}" returned ${results.length} memory(ies).`;
+      renderContextualMemories(results);
     });
     document.getElementById("searchInput").addEventListener("keydown", (e) => {
       if (e.key === "Enter") {

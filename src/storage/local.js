@@ -11,6 +11,8 @@ import { randomBytes } from "node:crypto";
 import { buildHierarchicalGraph } from "../organize.js";
 import { saveGraph, loadGraph } from "./graph.js";
 import { classifyMemory, calculateWeightedConfidence } from "../classify.js";
+import { attachProjectContext } from "../retrieval.js";
+import { resolveProjectContext } from "../projectShared.js";
 
 let currentEmbeddingService = null;
 let encryptionKey = null;
@@ -892,12 +894,16 @@ export async function migrateFlatToLayered(scope = "default") {
 
 export async function searchMemoriesLayered(query, filters = {}) {
   const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
+  const projectContextFilter = filters.projectContext;
   const graphData = await loadGraph();
   if (!graphData) {
-    return searchMemories(query, filters);
+    const baseResults = await searchMemories(query, filters);
+    return projectContextFilter ? attachProjectContext(baseResults, projectContextFilter) : baseResults;
   }
   const baseResults = await searchMemories(query, filters);
-  if (!filters.layered && !filters.useGraph) return baseResults;
+  if (!filters.layered && !filters.useGraph) {
+    return projectContextFilter ? attachProjectContext(baseResults, projectContextFilter) : baseResults;
+  }
   const baseNodes = (graphData.baseNodes || []).filter(b => b.scope === effectiveScope || effectiveScope === "default");
   const baseIdSet = new Set(baseNodes.map(b => b.id));
   const categoryNodes = (graphData.categoryNodes || []).filter(c => c.memoryIds.some(id => baseIdSet.has(id)));
@@ -913,7 +919,8 @@ export async function searchMemoriesLayered(query, filters = {}) {
   for (const m of system2Results) {
     if (!merged.has(m.id)) merged.set(m.id, m);
   }
-  return Array.from(merged.values());
+  const resultArray = Array.from(merged.values());
+  return projectContextFilter ? attachProjectContext(resultArray, projectContextFilter) : resultArray;
 }
 
 export async function listGraphMetrics() {

@@ -16,6 +16,28 @@ function tagOverlapScore(tagsA, tagsB) {
   return unionSize === 0 ? 0 : intersection / unionSize;
 }
 
+function projectContextScore(memory, projectContext) {
+  if (!projectContext) return 0;
+  const projectTags = projectContext.keywords || [];
+  const memoryTags = (memory.tags || []).map((t) => t.toLowerCase());
+  const memoryContent = String(memory.content || "").toLowerCase();
+  let score = tagOverlapScore(memoryTags, projectTags);
+  for (const kw of projectTags) {
+    if (memoryContent.includes(kw)) score += 0.1;
+  }
+  if (memory.scope === `project:${projectContext.projectName}`) {
+    score += 0.3;
+  }
+  return Math.min(1, score);
+}
+
+export function attachProjectContext(memories, projectContext) {
+  return memories.map((m) => ({
+    ...m,
+    projectContextScore: projectContextScore(m, projectContext),
+  }));
+}
+
 function bm25Score(queryTokens, documentTokens, k1 = 1.2, b = 0.75, avgDocLen = documentTokens.length) {
   const docLen = documentTokens.length;
   if (avgDocLen <= 0) avgDocLen = docLen;
@@ -44,11 +66,14 @@ export async function dualRouteRetrieve(query, scopes = "default", config = {}) 
 }
 
 export function simulateDualRouteRetrieve(query, memories, graphData, filters = {}) {
+  const projectContext = filters.projectContext;
   const system1Results = tagQueryFilter(query, memories, filters);
   const system2Results = globalSelectionRoute(query, graphData, filters);
+  const system1Contexted = projectContext ? attachProjectContext(system1Results, projectContext) : system1Results;
+  const system2Contexted = projectContext ? attachProjectContext(system2Results, projectContext) : system2Results;
   return {
-    system1Results,
-    system2Results,
+    system1Results: system1Contexted,
+    system2Results: system2Contexted,
     query,
     filters,
   };
