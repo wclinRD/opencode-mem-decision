@@ -17,8 +17,7 @@ function ensureVault() {
 function memoryFilePath(id, scope) {
   const isProjectScope = scope && scope.startsWith("project:");
   const base = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), VAULT_DIR);
-  const dir = path.dirname(base);
-  return path.join(dir, `${id}.md`);
+  return path.join(base, `${id}.md`);
 }
 
 function parseFrontMatter(content) {

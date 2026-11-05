@@ -268,7 +268,7 @@ export default Plugin.define({
         let activeProject = null;
         if (promptCwd) {
           activeProject = await resolveProjectShared({ memoryConfig, cwd: promptCwd }).catch(() => null);
-        } else {
+        } else if (typeof ctx.session?.context === "function") {
           try {
             const messages = await ctx.session.context({ sessionID });
             const sessionDir = deriveSessionDirFromMessages(messages);
@@ -276,6 +276,8 @@ export default Plugin.define({
           } catch (error) {
             console.error(`[opencode-mem-decision] session context failed: ${error?.message || error}`);
           }
+        } else {
+          activeProject = await resolveProjectShared({ memoryConfig, cwd: process.cwd() }).catch(() => null);
         }
 
         const memories = await injectMemories({
