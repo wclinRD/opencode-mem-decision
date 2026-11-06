@@ -121,12 +121,12 @@
 
 ### Step 12：效能基準與使用追蹤，更新手冊
 
-- [ ] 實作 `src/perf.js`：記錄 recall/precision, latency, injection hits/misses。
-- [ ] 新增 `memory.benchmark` custom tool與 `/api/memory/benchmark` endpoint。
-- [ ] 實作 `src/tracking.js` 記錄記憶生成、檢索與刪除使用次數。
-- [ ] 更新 `doc/handover.md` 完整報告所有 Phase。
-- [ ] 補充整體基準測試報告與 `tests/perf.test.js`。
-- [ ] 最終 commit 並 push。
+- [x] 實作 `src/perf.js`：記錄 recall/precision, latency, injection hits/misses。
+- [x] 新增 `memory.benchmark` custom tool與 `/api/memory/benchmark` endpoint。
+- [x] 實作 `src/tracking.js` 記錄記憶生成、檢索與刪除使用次數。
+- [x] 更新 `doc/handover.md` 完整報告所有 Phase。
+- [x] 補充整體基準測試報告與 `tests/perf.test.js`。
+- [x] 最終 commit 並 push。
 
 ### Step 7：後續高階整合（Phase 2，可选）
 

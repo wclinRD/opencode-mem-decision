@@ -70,6 +70,17 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - Imported `summarizeLongText` in `src/storage/local.js` and added `digestMemories` to the exported storage object.
 - All 109 tests continue to pass.
 
+## Phase 8: Performance Benchmarking and Access Tracking (Step 12)
+- Implemented `src/perf.js` with `calculateRecall`, `calculatePrecision`, `runBenchmark`, `getBenchmarks`, and `clearBenchmarkData` functions for benchmark query recall/precision/latency measurement.
+- Implemented `src/tracking.js` with `recordGeneration`, `recordSearch`, `recordDeletion`, `recordInjectionHit`, `recordInjectionMiss`, `getAccessStats`, and `clearTracking` functions to track memory generation, retrieval, deletion, and injection usage.
+- Integrated tracking into `src/storage/local.js`: `addMemory` calls `recordGeneration`, `searchMemories` calls `recordSearch`, `deleteMemory` calls `recordDeletion`.
+- Integrated injection tracking into `src/inject.js`: `injectMemories` calls `trackInjectionResults` which records hits for each injected memory and misses when no memories are injected.
+- Added `benchmark`, `access-stats`, and `clear-tracking` tool modes to `src/plugin.js` memory tool.
+- Added `/api/memory/benchmark` (POST and GET) and `/api/memory/access-stats` (GET and DELETE) endpoints to `src/server.js`.
+- Added `tests/perf.test.js` covering perf.js functions and tracking integration (20 tests).
+- All 162 tests pass.
+- Commit: `8432465`
+
 ## Key Files Changed
 - `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, `optimizeMemories` with exact + similarity-based near-duplicate detection (threshold 0.65), and new `digestMemories` for grouping and merging similar existing memories into consolidated summaries.
 - `src/server.js`: memory endpoints updated; `/api/memory/optimize` calls `storage.optimizeMemories(scope)` to remove duplicates; added `/api/memory/digest` to execute memory digestion.
@@ -84,7 +95,7 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - No context capacity threshold verification was implemented due to no actual measure tool for opencode context percentage in current harness. Progress paused after core Phase 2-3 work and then implemented subsequent phases.
 
 ## Future Recommendations
-- Benchmark dual-route vs single flat search accuracy and complete remaining Phase 3 benchmarking.
+- Benchmark dual-route vs single flat search accuracy using the new perf.js benchmarking infrastructure.
 - Consider adding LLM-powered summary generation when available, replacing heuristic summarization for higher-quality summaries.
 - Add full unit tests for `injectMemories` fallback retrieval and split truncation behavior.
 - Monitor context usage and consider implementing actual 75% capacity limit detection if the OpenCode API exposes such metrics.
