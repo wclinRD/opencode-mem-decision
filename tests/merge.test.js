@@ -12,9 +12,9 @@ function setup() {
   process.env.OPENCODE_MEM_DIR = tempDir;
 }
 
-function teardown() {
+async function teardown() {
   try {
-    rm(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   } catch {}
   delete process.env.OPENCODE_MEM_DIR;
 }
@@ -33,7 +33,7 @@ describe("deduplicateMemoriesArray", () => {
     assert.equal(result.kept[0].id, "m2");
     assert.equal(result.deletedExactIds[0], "m1");
     assert.deepEqual(result.deletedSimilarIds, []);
-    teardown();
+    await teardown();
   });
 
   test("removes near duplicates by similarity threshold", async () => {
@@ -46,7 +46,7 @@ describe("deduplicateMemoriesArray", () => {
     const result = await deduplicateMemoriesArray(mems, 0.7);
     assert.ok(result.deletedCount >= 1);
     assert.equal(result.kept.length, 2);
-    teardown();
+    await teardown();
   });
 });
 
@@ -70,6 +70,6 @@ describe("mergeDedupAndDigestMemories", () => {
     assert.ok(result.similarityDeletedCount >= 1);
     assert.ok(result.mergedGroupCount >= 1);
     assert.ok(result.keptCount <= result.originalCount);
-    teardown();
+    await teardown();
   });
 });
