@@ -9,7 +9,7 @@ import { logEvent, summarizeRecentEvents } from "./eventLog.js";
 import { classifyMemory } from "./classify.js";
 import { EmbeddingService } from "./embedding.js";
 import { ExtractionService } from "./extraction.js";
-import { setEmbeddingService, calculateMemoryUtilityScore, getTtlDaysForMemory } from "./storage/local.js";
+import { setEmbeddingService, calculateMemoryUtilityScore, getTtlDaysForMemory, calculateActualUtilityScore, demoteLowUtilityMemories, removeLowUtilityMemories } from "./storage/local.js";
 import { skillsStorage } from "./skills.js";
 import { resolveProjectShared } from "./projectShared.js";
 import { simulateDualRouteRetrieve } from "./retrieval.js";
@@ -24,7 +24,8 @@ const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
   "export", "import", "list-shards", "dream", "restore-trash",
   "organize", "retrieve", "utility",
-  "benchmark", "access-stats", "clear-tracking",
+  "benchmark", "access-stats", "access-log", "clear-tracking",
+  "demote-low-utility", "remove-low-utility",
   "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete", "knowledge-search", "knowledge-import",
   "skill-list", "skill-show", "skill-save", "skill-delete",
 ];
@@ -107,6 +108,15 @@ const MEMORY_TOOL_INPUT = {
     vectorSearch: {
       type: "boolean",
       description: "Use vector embedding search (legacy, superseded by hybrid).",
+    },
+    threshold: {
+      type: "number",
+      description: "Utility score threshold for demote/remove-low-utility (default 0.35 demote, 0.2 remove).",
+    },
+    offset: {
+      type: "integer",
+      minimum: 0,
+      description: "Offset for access-log pagination.",
     },
   },
   required: ["mode"],
@@ -252,6 +262,25 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
   if (mode === "access-stats") {
     const { getAccessStats } = await import("./tracking.js");
     return getAccessStats();
+  }
+
+  if (mode === "access-log") {
+    const { getAccessLog } = await import("./tracking.js");
+    const limit = args.limit || 50;
+    const offset = args.offset;
+    return getAccessLog(limit, offset);
+  }
+
+  if (mode === "demote-low-utility") {
+    const threshold = args.threshold !== undefined ? Number(args.threshold) : 0.35;
+    const effectiveScope = projectScope || (args.scope || "default");
+    return demoteLowUtilityMemories(memoryConfig, threshold, effectiveScope);
+  }
+
+  if (mode === "remove-low-utility") {
+    const threshold = args.threshold !== undefined ? Number(args.threshold) : 0.2;
+    const effectiveScope = projectScope || (args.scope || "default");
+    return removeLowUtilityMemories(memoryConfig, threshold, effectiveScope);
   }
 
   if (mode === "clear-tracking") {

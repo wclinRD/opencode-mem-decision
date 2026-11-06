@@ -20,6 +20,7 @@ import {
   recordGeneration,
   recordSearch,
   recordDeletion,
+  getAccessLogByMemory,
 } from "../tracking.js";
 
 let currentEmbeddingService = null;
@@ -235,6 +236,75 @@ export function calculateMemoryUtilityScore(memory) {
     ? Math.max(0, 1 - (Date.now() - Date.parse(memory.updatedAt)) / (30 * 86400000))
     : 0;
   return Math.round((base + confidenceScore + tagRichness + lengthScore + priorityScore + recencyScore * 0.3) * 100) / 100;
+}
+
+/**
+ * Calculate actual utility score based on real usage statistics.
+ * Combines content quality score with actual access counts, injection hits,
+ * and recency of last access.
+ */
+export async function calculateActualUtilityScore(memory, accessStats = null) {
+  // Base quality score (unchanged)
+  const qualityScore = calculateMemoryUtilityScore(memory);
+
+  // Get access statistics for this memory
+  let accessCount = 0;
+  let injectionHitCount = 0;
+  let lastAccessedAt = null;
+
+  if (accessStats && accessStats.memoryStats) {
+    const memStat = accessStats.memoryStats.find((s) => s.memoryId === memory.id);
+    if (memStat) {
+      accessCount = memStat.accessCount || 0;
+      injectionHitCount = memStat.injectionHitCount || 0;
+      lastAccessedAt = memStat.lastAccessedAt || null;
+    }
+  } else {
+    // Fetch directly from tracking
+    try {
+      const { getAccessStats } = await import("../tracking.js");
+      const stats = await getAccessStats();
+      const memStat = stats.memoryStats.find((s) => s.memoryId === memory.id);
+      if (memStat) {
+        accessCount = memStat.accessCount || 0;
+        injectionHitCount = memStat.injectionHitCount || 0;
+        lastAccessedAt = memStat.lastAccessedAt || null;
+      }
+    } catch (e) {
+      console.warn(`[opencode-mem] failed to get access stats: ${e.message}`);
+    }
+  }
+
+  // Usage-based score: log-scale access count, bounded [0, 0.2]
+  const usageAccessScore = Math.min(0.15, Math.log2(accessCount + 1) * 0.03);
+
+  // Injection hit score: bounded [0, 0.1]
+  const injectionScore = Math.min(0.1, injectionHitCount * 0.02);
+
+  // Recent usage recency: how recently was it accessed, bounded [0, 0.15]
+  let recentUsageScore = 0;
+  if (lastAccessedAt) {
+    const hoursSinceAccess = (Date.now() - Date.parse(lastAccessedAt)) / 3600000;
+    if (hoursSinceAccess < 24) recentUsageScore = 0.15;
+    else if (hoursSinceAccess < 168) recentUsageScore = 0.1; // < 7 days
+    else if (hoursSinceAccess < 720) recentUsageScore = 0.05; // < 30 days
+  }
+
+  // Penalty for never accessed (garbage content)
+  const neverAccessedPenalty = accessCount === 0 && injectionHitCount === 0 ? -0.2 : 0;
+
+  const totalScore = qualityScore + usageAccessScore + injectionScore + recentUsageScore + neverAccessedPenalty;
+  return {
+    score: Math.round(Math.max(0, Math.min(1.3, totalScore)) * 100) / 100,
+    qualityScore: Math.round(qualityScore * 100) / 100,
+    usageAccessScore: Math.round(usageAccessScore * 100) / 100,
+    injectionScore: Math.round(injectionScore * 100) / 100,
+    recentUsageScore: Math.round(recentUsageScore * 100) / 100,
+    neverAccessedPenalty,
+    accessCount,
+    injectionHitCount,
+    lastAccessedAt,
+  };
 }
 
 export function getTtlDaysForMemory(memory, config) {
@@ -633,6 +703,88 @@ export async function cleanupExpiredMemories(config) {
   return { deletedCount: deletedIds.length, deletedIds };
 }
 
+/**
+ * Demote low-utility memories: change type to "garbage" and set priority to 0.
+ * Uses actual utility score (based on real usage) to identify low-utility memories.
+ * Returns a report of demoted memory IDs and their scores.
+ */
+export async function demoteLowUtilityMemories(config, threshold = 0.35, scope = "default") {
+  const memories = await listAllMemories(scope);
+  const isProjectScope = scope && scope.startsWith("project:");
+  const filePath = isProjectScope ? projectStoragePath(scope) : path.join(getStorageDir(), MEMORIES_FILE);
+
+  // Get access stats once
+  let accessStats = null;
+  try {
+    const { getAccessStats } = await import("../tracking.js");
+    accessStats = await getAccessStats();
+  } catch (e) {
+    console.warn(`[opencode-mem] failed to get access stats for demotion: ${e.message}`);
+  }
+
+  const demotedIds = [];
+  const demotedDetails = [];
+
+  for (const memory of memories) {
+    if (memory.type === "garbage") continue; // already demoted
+
+    const scoreInfo = await calculateActualUtilityScore(memory, accessStats);
+    if (scoreInfo.score < threshold) {
+      const updated = await updateMemory(memory.id, { type: "garbage", priority: 0 });
+      if (updated) {
+        demotedIds.push(memory.id);
+        demotedDetails.push({ id: memory.id, score: scoreInfo.score, type: memory.type });
+      }
+    }
+  }
+
+  return {
+    demotedCount: demotedIds.length,
+    demotedIds,
+    threshold,
+    details: demotedDetails,
+  };
+}
+
+/**
+ * Remove (soft-delete) low-utility memories based on actual utility score.
+ * Moves memories to trash (soft delete) so they can be recovered.
+ */
+export async function removeLowUtilityMemories(config, threshold = 0.2, scope = "default") {
+  const memories = await listAllMemories(scope);
+
+  let accessStats = null;
+  try {
+    const { getAccessStats } = await import("../tracking.js");
+    accessStats = await getAccessStats();
+  } catch (e) {
+    console.warn(`[opencode-mem] failed to get access stats for removal: ${e.message}`);
+  }
+
+  const removedIds = [];
+  const removedDetails = [];
+
+  for (const memory of memories) {
+    if (memory.type === "garbage" || memory.isExpired) continue;
+
+    const scoreInfo = await calculateActualUtilityScore(memory, accessStats);
+    if (scoreInfo.score < threshold) {
+      const removed = await softDeleteMemory(memory.id);
+      if (removed) {
+        removedIds.push(memory.id);
+        removedDetails.push({ id: memory.id, score: scoreInfo.score, type: memory.type });
+      }
+    }
+  }
+
+  return {
+    removedCount: removedIds.length,
+    removedIds,
+    threshold,
+    details: removedDetails,
+  };
+}
+
 export async function searchMemories(query, filters = {}) {
   const effectiveScope = typeof filters === "string" ? filters : (filters.scope || "default");
   const isProjectScope = effectiveScope && effectiveScope.startsWith("project:");
@@ -928,7 +1080,7 @@ export async function updateMemory(id, updates) {
     memory.embedding = embedding;
   }
 
-  Object.assign(memory, { updatedAt: new Date().toISOString() });
+  Object.assign(memory, { updatedAt: updates.updatedAt || new Date().toISOString() });
   await writeJsonFile(filePath, db);
   await syncGraphAfterMemoryChange(db, "default");
   return memory;
@@ -1253,7 +1405,11 @@ export const localStorage = {
   importKnowledgeFromDirectory,
   cleanupExpiredMemories,
   cleanupTrash,
+  calculateMemoryUtilityScore,
+  calculateActualUtilityScore,
   getTtlDaysForMemory,
+  demoteLowUtilityMemories,
+  removeLowUtilityMemories,
   deduplicateMemoriesArray,
   mergeDedupAndDigestMemories,
   rebuildGraphIndexIfStale,

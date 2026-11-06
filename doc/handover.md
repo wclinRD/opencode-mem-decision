@@ -95,12 +95,53 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - All 183 tests pass (up from 162).
 - Commit: `625de35`
 
+## Step 16: Memory Access Tracking
+- Extended `src/tracking.js` with detailed access logging:
+  - `recordAccessLog({ memoryId, query, type, rank })` records each recall/inject event to `accessLogs` array
+  - `getAccessLog(limit, offset)` retrieves access logs with pagination support
+  - `getAccessLogByMemory(memoryId)` filters access logs by specific memory
+  - `recordSearch` now creates individual access log entries for each retrieved memory
+  - `recordInjectionHit` now records detailed inject access logs
+  - Access logs are capped at 10,000 entries to prevent unbounded growth
+  - `getAccessStats` now includes `totalAccessLogs` count and `lastAccessedAt` per memory
+- Added actual utility score calculation in `src/storage/local.js`:
+  - `calculateActualUtilityScore(memory, accessStats)` combines content quality score with usage-based factors:
+    - Log-scale access count (bounded 0.15)
+    - Injection hit count (bounded 0.1)
+    - Recent usage recency (bounded 0.15, tiered by hours since last access)
+    - Penalty for never-accessed memories (-0.2)
+  - Returns detailed breakdown: `score`, `qualityScore`, `usageAccessScore`, `injectionScore`, `recentUsageScore`, `neverAccessedPenalty`, `accessCount`, `injectionHitCount`, `lastAccessedAt`
+- Added low-utility memory management in `src/storage/local.js`:
+  - `demoteLowUtilityMemories(config, threshold, scope)` demotes memories below threshold to type "garbage" with priority 0
+  - `removeLowUtilityMemories(config, threshold, scope)` soft-deletes (moves to trash) memories below threshold
+  - Both use `calculateActualUtilityScore` to identify low-utility memories
+- Exposed new tool modes in `src/plugin.js`:
+  - `access-log`: retrieve access logs with optional limit/offset
+  - `demote-low-utility`: demote low-score memories with configurable threshold (default 0.35)
+  - `remove-low-utility`: soft-delete low-score memories with configurable threshold (default 0.2)
+  - Added `threshold` and `offset` fields to memory tool JSON schema
+- Added new API endpoints in `src/server.js`:
+  - `GET /api/memory/access-log`: retrieve access logs (supports `?limit=` and `?offset=`)
+  - `POST /api/memory/demote-low-utility`: demote low-score memories (body: `{threshold, scope}`)
+  - `POST /api/memory/remove-low-utility`: remove low-score memories (body: `{threshold, scope}`)
+- Added 17 comprehensive tests in `tests/accessTracking.test.js`:
+  - Access log recording for searches and injection hits
+  - Log pagination and filtering by memory ID
+  - Access stats integration
+  - Actual utility score calculation and usage-based boosting
+  - Demotion and removal of low-utility memories
+- Fixed `updateMemory` to respect explicitly provided `updatedAt` value (previously always overwritten)
+- All 200 tests pass (183 existing + 17 new).
+
 ## Key Files Changed
-- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, `optimizeMemories` with exact + similarity-based near-duplicate detection (threshold 0.65), and new `digestMemories` for grouping and merging similar existing memories into consolidated summaries.
-- `src/server.js`: memory endpoints updated; `/api/memory/optimize` calls `storage.optimizeMemories(scope)` to remove duplicates; added `/api/memory/digest` to execute memory digestion.
+- `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, `optimizeMemories` with exact + similarity-based near-duplicate detection (threshold 0.65), and new `digestMemories` for grouping and merging similar existing memories into consolidated summaries. Added `calculateActualUtilityScore`, `demoteLowUtilityMemories`, `removeLowUtilityMemories` for usage-based utility scoring and low-utility memory management.
+- `src/server.js`: memory endpoints updated; `/api/memory/optimize` calls `storage.optimizeMemories(scope)` to remove duplicates; added `/api/memory/digest` to execute memory digestion. Added `/api/memory/access-log`, `/api/memory/demote-low-utility`, `/api/memory/remove-low-utility` endpoints.
+- `src/tracking.js`: extended with detailed access logging (`recordAccessLog`, `getAccessLog`, `getAccessLogByMemory`), integrated into search and injection tracking flows.
+- `src/plugin.js`: added `access-log`, `demote-low-utility`, `remove-low-utility` tool modes with threshold and offset parameters.
 - `src/static/ui.html`: added "Digest Memories" button, digest results container, and event listener to display merged summaries after digestion.
 - `tests/storage.test.js`: added unit tests for `searchKnowledge` and `importKnowledgeFromDirectory`.
 - `tests/inject.test.js`, `tests/plugin.test.js`: updated injection and prompt hook tests for default scope behavior.
+- `tests/accessTracking.test.js`: new test file with 17 tests covering access log tracking, actual utility scoring, and low-utility memory demotion/removal.
 - `doc/swift/*.md`: sample Swift UI basics and modifiers documentation ingested into the knowledge base.
 
 ## Verification & Policy

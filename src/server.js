@@ -4,7 +4,7 @@ import * as fsPromises from "fs/promises";
 import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
-import { localStorage, listProjectCounts } from "./storage/local.js";
+import { localStorage, listProjectCounts, demoteLowUtilityMemories, removeLowUtilityMemories } from "./storage/local.js";
 import { buildProfile } from "./profile.js";
 import { runDreaming } from "./dreaming.js";
 import { summarizeRecentEvents } from "./eventLog.js";
@@ -258,6 +258,25 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
       } else if (path === "/api/memory/access-stats" && method === "GET") {
         const { getAccessStats } = await import("./tracking.js");
         sendJson(res, 200, await getAccessStats());
+      } else if (path === "/api/memory/access-log" && method === "GET") {
+        const { getAccessLog } = await import("./tracking.js");
+        const limit = Number(url.searchParams.get("limit") || 50);
+        const offset = url.searchParams.get("offset") ? Number(url.searchParams.get("offset")) : undefined;
+        sendJson(res, 200, await getAccessLog(limit, offset));
+      } else if (path === "/api/memory/demote-low-utility" && method === "POST") {
+        const body = await parseBody(req);
+        const threshold = body.threshold !== undefined ? Number(body.threshold) : 0.35;
+        const scope = body.scope || "default";
+        const defaultConfig = loadConfig();
+        const result = await demoteLowUtilityMemories(defaultConfig, threshold, scope);
+        sendJson(res, 200, result);
+      } else if (path === "/api/memory/remove-low-utility" && method === "POST") {
+        const body = await parseBody(req);
+        const threshold = body.threshold !== undefined ? Number(body.threshold) : 0.2;
+        const scope = body.scope || "default";
+        const defaultConfig = loadConfig();
+        const result = await removeLowUtilityMemories(defaultConfig, threshold, scope);
+        sendJson(res, 200, result);
       } else if (path === "/api/memory/access-stats" && method === "DELETE") {
         const { clearTracking } = await import("./tracking.js");
         const { clearBenchmarkData } = await import("./perf.js");
