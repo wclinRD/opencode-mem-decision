@@ -2,26 +2,116 @@ import { randomUUID } from "node:crypto";
 
 const LOCAL_VECTOR_DIM = 768;
 
-function deterministicHash(text, seed) {
+// Fixed vocabulary of common technical terms for improved local embedding
+const VOCABULARY = [
+  // Programming languages
+  "javascript", "typescript", "python", "java", "c", "cpp", "csharp", "go", "rust", "swift", "kotlin",
+  "php", "ruby", "perl", "bash", "shell", "sql", "html", "css", "json", "xml", "yaml", "toml",
+  // React
+  "react", "component", "hook", "hooks", "state", "props", "render", "effect", "usestate", "useeffect",
+  "usememo", "useref", "usecallback", "reducer", "context", "provider", "router", "route", "navigation",
+  // Vue
+  "vue", "directive", "computed", "watch", "template",
+  // Angular
+  "angular", "service", "controller", "module", "injector",
+  // Node.js
+  "node", "express", "middleware", "server", "client", "socket", "websocket",
+  // Python
+  "def", "import", "from", "as", "self", "method", "function", "class", "object", "array", "list",
+  "dict", "tuple", "set", "string", "integer", "float", "boolean", "none", "null", "undefined",
+  // Data structures
+  "tree", "graph", "stack", "queue", "heap", "hashmap", "hash", "linked-list",
+  // Algorithms
+  "sort", "search", "binary-search", "binary-tree", "dynamic-programming", "greedy", "backtracking", "dfs", "bfs",
+  // API
+  "api", "endpoint", "request", "response", "header", "body", "status", "error", "get", "post", "put",
+  "delete", "patch", "fetch", "axios", "curl",
+  // Database
+  "database", "db", "table", "row", "column", "index", "query", "select", "insert", "update",
+  "join", "primary-key", "foreign-key", "mysql", "postgres", "sqlite", "mongodb", "redis",
+  // Cloud
+  "aws", "azure", "gcp", "cloud", "serverless", "lambda", "s3", "ec2", "kubernetes", "docker",
+  "container", "pod", "deployment",
+  // DevOps
+  "ci", "cd", "pipeline", "build", "test", "deploy", "release", "version", "git", "github", "gitlab",
+  "commit", "branch", "merge", "rebase",
+  // Testing
+  "unit", "integration", "e2e", "mock", "stub", "spy", "coverage", "jest", "mocha", "cypress", "playwright",
+  // Frontend
+  "browser", "dom", "element", "event", "click", "submit", "form", "input", "button", "textarea",
+  "select", "option", "label", "checkbox", "radio",
+  // UI/UX
+  "ui", "ux", "design", "layout", "responsive", "mobile", "desktop", "accessibility", "theme",
+  // Security
+  "security", "auth", "authentication", "authorization", "token", "jwt", "oauth", "sso", "password",
+  "encryption", "hashing", "salt",
+  // Networking
+  "http", "https", "tcp", "udp", "ip", "dns", "proxy", "firewall", "ssh",
+  // Performance
+  "performance", "optimization", "caching", "lazy", "loading", "bundle", "webpack", "rollup", "vite",
+  // Error handling
+  "exception", "try", "catch", "finally", "throw", "stack-trace", "debug", "logging", "monitoring",
+  // Configuration
+  "config", "configuration", "environment", "env", "variable", "constant", "setting", "option",
+  "parameter", "argument",
+  // Documentation
+  "doc", "documentation", "readme", "api-docs", "swagger", "openapi",
+  // Other
+  "memory", "storage", "file", "directory", "path", "url", "uri", "plugin", "extension", "package",
+  "dependency", "interface", "implementation", "abstraction", "encapsulation", "inheritance",
+  "polymorphism", "oop", "functional", "paradigm", "pattern", "singleton", "factory",
+  "observer", "strategy", "decorator", "adapter", "proxy", "mediator", "facade",
+];
+
+function hashTerm(term) {
   let h = 0;
-  const key = String(seed) + String(text);
-  for (let i = 0; i < key.length; i++) {
-    const char = key.charCodeAt(i);
-    h = ((h << 5) - h) + char;
+  for (let i = 0; i < term.length; i++) {
+    h = ((h << 5) - h) + term.charCodeAt(i);
     h &= h;
   }
-  return h;
+  return Math.abs(h);
 }
 
-function hashText(text) {
+function textToVector(text) {
+  const words = text.toLowerCase().split(/\s+/);
   const vector = new Float32Array(LOCAL_VECTOR_DIM);
-  for (let i = 0; i < LOCAL_VECTOR_DIM; i++) {
-    vector[i] = (deterministicHash(text, i) % 10000) / 10000;
+
+  // Compute term frequencies
+  const tf = {};
+  for (const word of words) {
+    tf[word] = (tf[word] || 0) + 1;
   }
+
+  // Also add 2-grams
+  for (let i = 0; i < words.length - 1; i++) {
+    const bigram = `${words[i]} ${words[i + 1]}`;
+    tf[bigram] = (tf[bigram] || 0) + 1;
+  }
+
+  // Map terms to vector dimensions using vocabulary
+  for (const [term, count] of Object.entries(tf)) {
+    if (VOCABULARY.includes(term)) {
+      const idx = VOCABULARY.indexOf(term);
+      vector[idx] += count;
+    } else {
+      // Hash unknown terms to a dimension
+      const idx = (VOCABULARY.length + hashTerm(term)) % LOCAL_VECTOR_DIM;
+      vector[idx] += count;
+    }
+  }
+
+  // Normalize
   let norm = 0;
-  for (let i = 0; i < LOCAL_VECTOR_DIM; i++) norm += vector[i] * vector[i];
+  for (let i = 0; i < LOCAL_VECTOR_DIM; i++) {
+    norm += vector[i] * vector[i];
+  }
   norm = Math.sqrt(norm);
-  if (norm > 0) for (let i = 0; i < LOCAL_VECTOR_DIM; i++) vector[i] /= norm;
+  if (norm > 0) {
+    for (let i = 0; i < LOCAL_VECTOR_DIM; i++) {
+      vector[i] /= norm;
+    }
+  }
+
   return Array.from(vector);
 }
 
@@ -34,19 +124,55 @@ export class EmbeddingService {
     if (!text || typeof text !== "string") {
       return Array.from(new Float32Array(LOCAL_VECTOR_DIM));
     }
-    if (this.config.embeddingApiUrl) {
-      return this._embedRemote(text, this.config.embeddingModel || "text-embedding-3-small", this.config.embeddingApiUrl, this.config.embeddingApiKey);
-    }
-    const model = this.config.embeddingModel || "Xenova/nomic-embed-text-v1";
-    if (model.startsWith("Xenova/")) {
+
+    const provider = this.config.embeddingProvider;
+
+    try {
+      // If provider is explicitly set, use it
+      if (provider) {
+        if (provider === "openai" && this.config.embeddingApiUrl) {
+          return await this._embedRemote(text, this.config.embeddingModel || "text-embedding-3-small", this.config.embeddingApiUrl, this.config.embeddingApiKey);
+        }
+        if (provider === "ollama") {
+          return await this._embedOllama(text);
+        }
+        if (provider === "hf") {
+          const model = this.config.embeddingModel || "Xenova/nomic-embed-text-v1";
+          if (!model.startsWith("Xenova/")) {
+            return await this._embedHfInference(text, model);
+          }
+        }
+        if (provider === "local") {
+          return this._embedLocal(text);
+        }
+      }
+
+      // Fallback chain based on config (when provider is not set)
+      if (this.config.embeddingApiUrl && !this._isOllamaUrl(this.config.embeddingApiUrl)) {
+        return await this._embedRemote(text, this.config.embeddingModel || "text-embedding-3-small", this.config.embeddingApiUrl, this.config.embeddingApiKey);
+      }
+      if (this._isOllamaUrl(this.config.embeddingApiUrl)) {
+        return await this._embedOllama(text);
+      }
+      const model = this.config.embeddingModel || "Xenova/nomic-embed-text-v1";
+      if (!model.startsWith("Xenova/")) {
+        return await this._embedHfInference(text, model);
+      }
+
+      return this._embedLocal(text);
+    } catch (error) {
+      console.warn(`Embedding provider error, falling back to local: ${error.message}`);
       return this._embedLocal(text);
     }
-    return this._embedHfInference(text, model);
   }
 
   async embedBatch(texts) {
     const results = await Promise.all(texts.map((text) => this.embed(text)));
     return results;
+  }
+
+  _isOllamaUrl(url) {
+    return url && (url.startsWith("http://localhost:11434") || url.startsWith("https://localhost:11434"));
   }
 
   async _embedRemote(text, model, apiBaseUrl, apiKey) {
@@ -68,7 +194,30 @@ export class EmbeddingService {
   }
 
   _embedLocal(text) {
-    return hashText(text);
+    return textToVector(text);
+  }
+
+  async _embedOllama(text) {
+    const host = this.config.embeddingOllamaHost || "http://localhost:11434";
+    const model = this.config.embeddingOllamaModel || "nomic-embed-text";
+    const url = `${host}/api/embed`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt: text }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama embedding API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (data && data.embedding) {
+      return data.embedding;
+    }
+
+    throw new Error("Ollama embedding API returned unexpected response");
   }
 
   async _embedHfInference(text, model) {
