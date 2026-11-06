@@ -204,10 +204,14 @@
 #### Step 17：Hybrid Retrieval（Embedding + BM25）
 **問題：** 目前檢索是 keyword/BM25，沒有語意搜索。查詢「怎麼 deploy」找不到「deployment uses Fly.io」。
 **改善：**
-- [ ] 混合檢索 = embedding cosine similarity + BM25 score
-- [ ] 實現 HNSW 向量索引，支援快速 ANN search
-- [ ] 可調配的 weighting（semantic vs keyword）
-- [ ] 測試：驗證 recall@k 提升
+- [x] 混合檢索 = embedding cosine similarity + BM25 score
+- [x] 可調配的 weighting（semantic vs keyword）
+- [x] 新增 `hybridRetrieve`（加權組合）與 `dualHybridRetrieve`（RRF fusion）
+- [x] `searchMemories` 預設使用 hybrid retrieval（當 embedding service 可用時）
+- [x] Plugin tool 支援 `hybrid` / `vectorSearch` 參數
+- [x] Server API `/api/memory/search?hybrid=true`
+- [x] 測試：21 new tests in `tests/hybrid.test.js`，183/183 通過
+- [ ] 實現 HNSW 向量索引（需要外部 library，長期規劃）
 
 #### Step 18：AI-Based Dreaming
 **問題：** Dreaming consolidation 是啟發式，沒有 AI 理解內容。

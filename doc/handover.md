@@ -81,6 +81,20 @@ Strengthen the `opencode-mem-decision` plugin by implementing dynamic tag extrac
 - All 162 tests pass.
 - Commit: `8432465`
 
+## Phase 9: Hybrid Retrieval (Step 17)
+- Implemented `src/hybridRetrieval.js` with two retrieval strategies:
+  - `hybridRetrieve`: weighted combination of embedding cosine similarity and BM25 lexical matching
+  - `dualHybridRetrieve`: separate BM25 and embedding rankings fused via Reciprocal Rank Fusion (RRF)
+- BM25 scoring with simplified IDF and configurable k1/b parameters
+- `searchMemories` in `src/storage/local.js` now uses hybrid retrieval by default when embedding service is available
+- Added search tracking to hybrid retrieval paths to maintain access statistics
+- Updated `src/retrieval.js` to export hybrid retrieval functions
+- Updated `src/plugin.js` to support `hybrid` and `vectorSearch` parameters in the memory tool schema
+- Updated `src/server.js` search API to support `?hybrid=true` parameter
+- Added 21 targeted tests in `tests/hybrid.test.js` covering BM25 scoring, embedding scoring, RRF fusion, and both hybrid retrieval strategies
+- All 183 tests pass (up from 162).
+- Commit: `625de35`
+
 ## Key Files Changed
 - `src/storage/local.js`: layered storage methods and weighted search/list ranking; added listMemories filtering support, knowledge search/import, `optimizeMemories` with exact + similarity-based near-duplicate detection (threshold 0.65), and new `digestMemories` for grouping and merging similar existing memories into consolidated summaries.
 - `src/server.js`: memory endpoints updated; `/api/memory/optimize` calls `storage.optimizeMemories(scope)` to remove duplicates; added `/api/memory/digest` to execute memory digestion.
