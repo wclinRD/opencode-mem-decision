@@ -1,6 +1,6 @@
 # OpenCode Mem-Decision Plugin 待辦清單
 
-## 已完成（截至 2026-11-04）
+## 已完成（截至 2026-11-06）
 
 - [x] Step 1：改善 auto-capture 內容質量
   - [x] 過濾 `[auto-capture]`、`tool_use`、`tool_result`、程式狀態訊息等雜訊。
@@ -8,7 +8,7 @@
   - [x] 調整 confidence 門檻與 pattern 分類優先級。
   - [x] 補齊 `eventLog.test.js` 測試。
 
-## 未完成
+## 已完成（已提交並實作）
 
 ### Step 2：記憶 TTL / 過期清理機制
 
@@ -70,55 +70,37 @@
 
 ### Step 6：HybridTagGraph Memory（靜態標籤分組＋動態分層/圖檢索）
 
-- [ ] 研究靜態標籤分組與動態分層/圖檢索的最新演算法（Mnemis、MemTree、TagRAG、TAGGRAPH）。
-- [ ] 定義記憶分層模型：Base Memory（原始）、Summary Node（摘要）、Principle/Category Node（分類抽象）。
-- [ ] 實作 `src/organize.js`：
-  - [ ] 生成 Base / Summary / Category 節點並建立 adjacency graph。
-  - [ ] 支援 tag overlap / keyword 相似度建邊。
-  - [ ] 支援時間邊（temporal edges）。
-- [ ] 實作 `src/retrieval.js`：
-  - [ ] System-1 Similarity Search（tags + keyword/vector similarity）。
-  - [ ] System-2 Global Selection（沿 hierarchy 遍歷取相關社群與原始記憶）。
-- [ ] 實作 `src/storage/graph.js`：圖結構 JSON/Markdown 儲存與載入。
-- [ ] 更新 `src/static/ui.html`：增加「Organize Memory」section，顯示分層組織與檢索結果。
-- [ ] 實作 `POST /api/memory/organize` 與 `POST /api/memory/retrieve`。
-- [ ] 補充測試（`organize.test.js`、`retrieval.test.js`、`graph.test.js`）。
-- [ ] 更新 `doc/handover.md`。
-- [ ] 同步 `src/static/ui.html` 至全局 plugin。
-
-### Step 6：HybridTagGraph Memory（靜態標籤分組＋動態分層/圖檢索）
-
-- [ ] 研究靜態標籤分組與動態分層/圖檢索的最新演算法（Mnemis、MemTree、TagRAG、TAGGRAPH）。
-- [ ] 定義記憶分層模型：Base Memory（原始）、Summary Node（摘要）、Principle/Category Node（分類抽象）。
-- [ ] 實作 `src/organize.js`：
-  - [ ] 生成 Base / Summary / Category 節點並建立 adjacency graph。
-  - [ ] 支援 tag overlap / keyword 相似度建邊。
-  - [ ] 支援時間邊（temporal edges）。
-- [ ] 實作 `src/retrieval.js`：
-  - [ ] System-1 Similarity Search（tags + keyword/vector similarity）。
-  - [ ] System-2 Global Selection（沿 hierarchy 遍歷取相關社群與原始記憶）。
-- [ ] 實作 `src/storage/graph.js`：圖結構 JSON/Markdown 儲存與載入。
-- [ ] 更新 `src/static/ui.html`：增加「Organize Memory」section，顯示分層組織與檢索結果。
-- [ ] 實作 `POST /api/memory/organize` 與 `POST /api/memory/retrieve`。
-- [ ] 補充測試（`organize.test.js`、`retrieval.test.js`、`graph.test.js`）。
+- [x] 研究靜態標籤分組與動態分層/圖檢索的最新演算法（Mnemis、MemTree、TagRAG、TAGGRAPH）。
+- [x] 定義記憶分層模型：Base Memory（原始）、Summary Node（摘要）、Principle/Category Node（分類抽象）。
+- [x] 實作 `src/organize.js`：
+  - [x] 生成 Base / Summary / Category 節點並建立 adjacency graph。
+  - [x] 支援 tag overlap / keyword 相似度建邊。
+  - [x] 支援時間邊（temporal edges）。
+- [x] 實作 `src/retrieval.js`：
+  - [x] System-1 Similarity Search（tags + keyword/vector similarity）。
+  - [x] System-2 Global Selection（沿 hierarchy 遍歷取相關社群與原始記憶）。
+- [x] 實作 `src/storage/graph.js`：圖結構 JSON/Markdown 儲存與載入。
+- [x] 更新 `src/static/ui.html`：增加「Organize Memory」section，顯示分層組織與檢索結果。
+- [x] 實作 `POST /api/memory/organize` 與 `POST /api/memory/retrieve`。
+- [x] 補充測試：`organize.test.js`、`retrieval.test.js`（`graph.test.js` 尚未實作，後續補充）。
 - [ ] 更新 `doc/handover.md`。
 - [ ] 同步 `src/static/ui.html` 至全局 plugin。
 
 ### Step 8：記憶效用分數與 TTL 動態調整
 
-- [ ] 實作 `calculateMemoryUtilityScore(memory)` 綜合分數（content length, type, tags, usage count, recency）。
-- [ ] 在 `getTtlDaysForMemory` 加入 utility 分數反比調整 TTL。
-- [ ] 新增 `memory.utility` tool 與 `/api/memory/utility` endpoint.
-- [ ] 測試：`tests/utility.test.js`，含分數計算與 TTL 動態計算。
+- [x] 實作 `calculateMemoryUtilityScore(memory)` 綜合分數（content length, type, tags, usage count, recency）。
+- [x] 在 `getTtlDaysForMemory` 加入 utility 分數反比調整 TTL。
+- [x] 新增 `memory.utility` tool 與 `/api/memory/utility` endpoint.
+- [x] 測試：`tests/utility.test.js`，含分數計算與 TTL 動態計算。
 
 ### Step 9：情境化檢索與專案上下文整合
 
-- [ ] 實作 `resolveProjectContext(projectRoot)` 讀取 `.opencode-mem-project` 或当前 project。
-- [ ] 更新 `searchMemoriesLayered` 與 `injectMemories` 加入 project context 權重。
-- [ ] 實作 `attachProjectContext(memories, projectRoot)` 對記憶附加專案相關性分數。
-- [ ] 在 `/api/memory/search` 與 `/api/memory/inject` 支援 `projectRoot` filter。
-- [ ] 更新 UI：「Contextual Search」與 project filter。
-- [ ] 測試：`tests/contextual.test.js`，驗證 project context 提升 recall。
+- [x] 實作 `resolveProjectContext(projectRoot)` 讀取 `.opencode-mem-project` 或 current project。
+- [x] 更新 `searchMemoriesLayered` 與 `injectMemories` 加入 project context 權重。
+- [x] 實作 `attachProjectContext(memories, projectRoot)` 對記憶附加專案相關性分數。
+- [x] 在 `/api/memory/search` 與 `/api/memory/inject` 支援 `projectRoot` filter。
+- [x] 更新 UI：「Contextual Search」與 project filter。
+- [x] 測試：`tests/contextual.test.js`，驗證 project context 提升 recall。
 
 ### Step 10：分組與去重合併流程與 UI 更新
 
@@ -134,6 +116,8 @@
 - [x] 實作 `rebuildGraphIndexIfStale(db, graph)`。
 - [x] 更新 `src/storage/graph.js` 與 `local.js` 的同步流程。
 - [x] 增加圖索引版本與同步時間戳記。
+
+## 未完成
 
 ### Step 12：效能基準與使用追蹤，更新手冊
 
