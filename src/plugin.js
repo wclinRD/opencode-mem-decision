@@ -100,6 +100,14 @@ const MEMORY_TOOL_INPUT = {
       type: "boolean",
       description: "Include expired memories in search/benchmark.",
     },
+    hybrid: {
+      type: "boolean",
+      description: "Use hybrid retrieval (embedding + BM25) for search.",
+    },
+    vectorSearch: {
+      type: "boolean",
+      description: "Use vector embedding search (legacy, superseded by hybrid).",
+    },
   },
   required: ["mode"],
   additionalProperties: false,
@@ -171,7 +179,15 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
     }
     return storage.updateMemory(args.id, updates);
   }
-  if (mode === "search") return storage.searchMemories(args.query, { scope: projectScope || (args.scope || "default"), includeExpired: args.includeExpired !== true, ttlDays: args.ttlDays });
+  if (mode === "search") {
+    return storage.searchMemories(args.query, {
+      scope: projectScope || (args.scope || "default"),
+      includeExpired: args.includeExpired !== true,
+      ttlDays: args.ttlDays,
+      vectorSearch: args.hybrid || args.vectorSearch || false,
+      hybrid: args.hybrid || false,
+    });
+  }
   if (mode === "list") return storage.listMemories(args.limit || 50, projectScope || (args.scope || "default"), memoryConfig);
   if (mode === "profile") return buildProfile({ storage, memoryConfig });
   if (mode === "forget") return storage.deleteMemory(args.id);

@@ -14,7 +14,7 @@ import {
   classifyMemory,
   calculateWeightedConfidence,
 } from "../classify.js";
-import { attachProjectContext } from "../retrieval.js";
+import { attachProjectContext, hybridRetrieve, dualHybridRetrieve } from "../retrieval.js";
 import { resolveProjectContext } from "../projectShared.js";
 import {
   recordGeneration,
@@ -670,33 +670,49 @@ export async function searchMemories(query, filters = {}) {
     scoped = scoped.filter((m) => m.createdAt >= cutoff);
   }
 
-  // Filter by query vector if vectorSearch is enabled and embedding available
+  // Hybrid retrieval: combine embedding similarity with BM25 scoring
   if (vectorSearch && currentEmbeddingService && query && query.length > 0) {
     try {
-      const queryVec = await currentEmbeddingService.embed(query);
-      const memoryCount = scoped.length;
-      const nowMs = Date.now();
-      return scoped
-        .filter((memory) => memory.embedding && memory.embedding.length === queryVec.length)
-        .map((memory) => {
-          const sim = cosineSimilarity(memory.embedding, queryVec);
-          const weightedConfidence = calculateWeightedConfidence(
-            Number(memory.confidence) || 0.5,
-            memory.sensitivity,
-            memory.createdAt,
-            undefined,
-            memoryCount
-          );
-          const recencyFactor = memory.createdAt ? Math.max(0, 1 - (nowMs - Date.parse(memory.createdAt)) / (30 * 86400000)) : 1;
-          const combinedScore = Math.max(0, sim + weightedConfidence * recencyFactor + Number(memory.priority) * 0.1);
-          return { memory, combinedScore };
-        })
-        .filter((entry) => entry.combinedScore >= similarityThreshold)
-        .sort((a, b) => b.combinedScore - a.combinedScore)
-        .map((entry) => attachProjectName(entry.memory));
+      const results = await hybridRetrieve(query, scoped, {
+        embed: (text) => currentEmbeddingService.embed(text),
+        embWeight: 0.5,
+        bm25Weight: 0.5,
+        maxResults: 50,
+      });
+      const memories = results.map((entry) => attachProjectName(entry.memory));
+      try {
+        await recordSearch(query, memories.map((m) => m.id), memories.length);
+      } catch (e) {
+        console.warn(`[opencode-mem] tracking search failed: ${e.message}`);
+      }
+      return memories;
     } catch (e) {
-      console.error(`[opencode-mem] vector search failed: ${e.message}`);
+      console.error(`[opencode-mem] hybrid search failed: ${e.message}`);
       // fallback to string search below
+    }
+  }
+
+  // If embedding service is available, use hybrid retrieval with BM25 fallback
+  if (currentEmbeddingService && query && query.length > 0) {
+    try {
+      const hasEmbeddings = scoped.some((m) => m.embedding);
+      if (hasEmbeddings) {
+        const results = await hybridRetrieve(query, scoped, {
+          embed: (text) => currentEmbeddingService.embed(text),
+          embWeight: 0.3,
+          bm25Weight: 0.7,
+          maxResults: 50,
+        });
+        const memories = results.map((entry) => attachProjectName(entry.memory));
+        try {
+          await recordSearch(query, memories.map((m) => m.id), memories.length);
+        } catch (e) {
+          console.warn(`[opencode-mem] tracking search failed: ${e.message}`);
+        }
+        return memories;
+      }
+    } catch (e) {
+      console.warn(`[opencode-mem] hybrid search failed, using BM25: ${e.message}`);
     }
   }
 

@@ -1,5 +1,8 @@
 import { cosineSimilarity } from "./embedding.js";
 import { buildHierarchicalGraph } from "./organize.js";
+import { hybridRetrieve, dualHybridRetrieve } from "./hybridRetrieval.js";
+
+export { hybridRetrieve, dualHybridRetrieve };
 
 function tokenize(text) {
   return String(text ?? "").toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];

@@ -149,12 +149,14 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
         const timeRange = url.searchParams.get("timeRange");
         const ttlDays = url.searchParams.get("ttlDays");
         const includeExpired = url.searchParams.get("includeExpired") === "true";
+        const hybrid = url.searchParams.get("hybrid") === "true";
         const filters = { scope: effectiveScope };
         if (type !== "all") filters.type = type;
         if (confidence) filters.confidence = Number(confidence);
         if (timeRange) filters.timeRange = Number(timeRange);
         if (ttlDays) filters.ttlDays = Number(ttlDays);
         filters.includeExpired = includeExpired;
+        if (hybrid) filters.vectorSearch = true;
         const defaultConfig = loadConfig();
         let results = await storage.searchMemories(query, filters);
         if (projectRoot) {
