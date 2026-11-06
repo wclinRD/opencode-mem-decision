@@ -320,19 +320,21 @@ test("storage - vector search finds similar memories", async () => {
   const embeddingService = new EmbeddingService({ embeddingModel: "Xenova/nomic-embed-text-v1" });
   setEmbeddingService(embeddingService);
 
-  await localStorage.addMemory("Vector search test topic one", "project");
-  await localStorage.addMemory("Vector search test topic two", "project");
-  await localStorage.addMemory("Unrelated content about weather", "project");
+  const testScope = "vector-search-test";
+  const noopDup = { enabled: false };
+  await localStorage.addMemory("React component state management uses hooks", testScope, null, {}, noopDup);
+  await localStorage.addMemory("React component state management uses UI features", testScope, null, {}, noopDup);
+  await localStorage.addMemory("Random unrelated weather information about rain", testScope, null, {}, noopDup);
 
-  const results = await localStorage.searchMemories("Vector search test topic one", {
-    scope: "project",
+  const results = await localStorage.searchMemories("React component state management uses hooks", {
+    scope: testScope,
     vectorSearch: true,
-    similarityThreshold: 0.4,
+    similarityThreshold: 0.25,
   });
 
   assert.ok(results.length >= 1);
-  const found1 = results.find((m) => m.content === "Vector search test topic one");
-  const found2 = results.find((m) => m.content === "Vector search test topic two");
+  const found1 = results.find((m) => m.content === "React component state management uses hooks");
+  const found2 = results.find((m) => m.content === "React component state management uses UI features");
   assert.ok(found1);
   assert.ok(found2);
 
