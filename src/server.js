@@ -253,6 +253,30 @@ export function createWebServer({ memoryConfig, storage, configPath }) {
           utilityScore: calculateMemoryUtilityScore(m),
           ttlDays: getTtlDaysForMemory(m, defaultConfig),
         })));
+      } else if (path === "/api/memory/access-stats" && method === "GET") {
+        const { getAccessStats } = await import("./tracking.js");
+        sendJson(res, 200, await getAccessStats());
+      } else if (path === "/api/memory/access-stats" && method === "DELETE") {
+        const { clearTracking } = await import("./tracking.js");
+        const { clearBenchmarkData } = await import("./perf.js");
+        await clearTracking();
+        await clearBenchmarkData();
+        sendJson(res, 200, { cleared: true });
+      } else if (path === "/api/memory/benchmark" && method === "POST") {
+        const body = await parseBody(req);
+        const { runBenchmark } = await import("./perf.js");
+        const scope = body.scope || "default";
+        const filters = { scope, includeExpired: body.includeExpired !== true };
+        const result = await runBenchmark(
+          body.name || "web-benchmark",
+          body.queries || [],
+          async (query) => await storage.searchMemories(query, filters),
+          filters,
+        );
+        sendJson(res, 200, result);
+      } else if (path === "/api/memory/benchmark" && method === "GET") {
+        const { getBenchmarks } = await import("./perf.js");
+        sendJson(res, 200, await getBenchmarks());
       } else if (path === "/api/profile" && method === "GET") {
         sendJson(res, 200, await buildProfile({ memoryConfig, storage }));
       } else if (path === "/api/dream" && method === "POST") {

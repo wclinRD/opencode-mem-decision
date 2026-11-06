@@ -10,9 +10,17 @@ import { calculateSimilarity, summarizeLongText } from "../capture.js";
 import { randomBytes } from "node:crypto";
 import { buildHierarchicalGraph } from "../organize.js";
 import { saveGraph, loadGraph, syncGraphToStorage, rebuildGraphIndexIfStale } from "./graph.js";
-import { classifyMemory, calculateWeightedConfidence } from "../classify.js";
+import {
+  classifyMemory,
+  calculateWeightedConfidence,
+} from "../classify.js";
 import { attachProjectContext } from "../retrieval.js";
 import { resolveProjectContext } from "../projectShared.js";
+import {
+  recordGeneration,
+  recordSearch,
+  recordDeletion,
+} from "../tracking.js";
 
 let currentEmbeddingService = null;
 let encryptionKey = null;
@@ -183,6 +191,11 @@ export async function addMemory(content, scope = "project", sessionId, metadata 
   db.memories.push(memory);
   await writeJsonFile(filePath, db);
   await syncGraphAfterMemoryChange(db, "default");
+  try {
+    await recordGeneration(memory.id, scope);
+  } catch (e) {
+    console.warn(`[opencode-mem] tracking add failed: ${e.message}`);
+  }
   return memory;
 }
 
@@ -690,17 +703,23 @@ export async function searchMemories(query, filters = {}) {
   const queryTokens = query ? [...new Set(tokenize(query))] : [];
 
   if (!queryTokens.length) {
-    return scoped
+    const results = scoped
       .sort((a, b) => Number(b.priority) - Number(a.priority) || new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 50)
       .map(attachProjectName);
+    try {
+      await recordSearch(query, results.map((m) => m.id), results.length);
+    } catch (e) {
+      console.warn(`[opencode-mem] tracking search failed: ${e.message}`);
+    }
+    return results;
   }
 
   // Compute memory count for context factor
   const memoryCount = scoped.length;
   const nowMs = Date.now();
 
-  return scoped
+  const results = scoped
     .map((memory) => {
       const memoryTokens = new Set(tokenize(memory.content));
       const score = queryTokens.reduce((total, token) => total + (memoryTokens.has(token) ? 1 : 0), 0);
@@ -718,6 +737,13 @@ export async function searchMemories(query, filters = {}) {
     .filter((entry) => entry.combinedScore > 0)
     .sort((a, b) => b.combinedScore - a.combinedScore || new Date(b.createdAt) - new Date(a.createdAt))
     .map((entry) => attachProjectName(entry.memory));
+
+  try {
+    await recordSearch(query, results.map((m) => m.id), results.length);
+  } catch (e) {
+    console.warn(`[opencode-mem] tracking search failed: ${e.message}`);
+  }
+  return results;
 }
 
 export async function listAllMemories(scope = "default") {
@@ -780,6 +806,11 @@ export async function deleteMemory(id) {
     db.memories.splice(index, 1);
     await writeJsonFile(filePath, db);
     await syncGraphAfterMemoryChange(db, "default");
+    try {
+      await recordDeletion(id);
+    } catch (e) {
+      console.warn(`[opencode-mem] tracking delete failed: ${e.message}`);
+    }
     return true;
   }
   return false;

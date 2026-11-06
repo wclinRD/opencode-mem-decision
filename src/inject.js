@@ -4,6 +4,7 @@ import { simulateDualRouteRetrieve } from "./retrieval.js";
 import { isGenericOrNoiseText } from "./capture.js";
 import { attachProjectContext } from "./retrieval.js";
 import { resolveProjectContext } from "./projectShared.js";
+import { recordInjectionHit, recordInjectionMiss } from "./tracking.js";
 
 export const INJECTION_MARKER = "<!-- opencode-mem-decision:injected -->";
 
@@ -124,10 +125,32 @@ export async function injectMemories({
   const contexted = projectContext ? attachProjectContext(filtered, projectContext) : filtered;
 
   if (memoryConfig.chatMessage.filterInjectedPrompts) {
-    return contexted.filter((m) => !isSystemPrompt(m.content));
+    const result = contexted.filter((m) => !isSystemPrompt(m.content));
+    trackInjectionResults(result);
+    return result;
   }
 
-  return contexted.filter((m) => m.sensitivity !== "sensitive");
+  const result = contexted.filter((m) => m.sensitivity !== "sensitive");
+  trackInjectionResults(result);
+  return result;
+}
+
+async function trackInjectionResults(memories) {
+  if (!memories || memories.length === 0) {
+    try {
+      await recordInjectionMiss();
+    } catch (e) {
+      console.warn(`[opencode-mem] tracking injection miss failed: ${e.message}`);
+    }
+    return;
+  }
+  for (const m of memories) {
+    try {
+      await recordInjectionHit(m.id);
+    } catch (e) {
+      console.warn(`[opencode-mem] tracking injection hit failed: ${e.message}`);
+    }
+  }
 }
 
 function isSystemPrompt(content) {

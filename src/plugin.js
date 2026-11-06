@@ -24,6 +24,7 @@ const MEMORY_MODES = [
   "add", "search", "list", "profile", "forget", "migrate",
   "export", "import", "list-shards", "dream", "restore-trash",
   "organize", "retrieve", "utility",
+  "benchmark", "access-stats", "clear-tracking",
   "knowledge-list", "knowledge-show", "knowledge-save", "knowledge-delete", "knowledge-search", "knowledge-import",
   "skill-list", "skill-show", "skill-save", "skill-delete",
 ];
@@ -77,6 +78,27 @@ const MEMORY_TOOL_INPUT = {
     buildGraph: {
       type: "boolean",
       description: "Build or update hierarchical graph after add memory.",
+    },
+    queries: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          expectedIds: { type: "array", items: { type: "string" } },
+          expectedCount: { type: "integer" },
+        },
+        required: ["query"],
+      },
+      description: "Benchmark queries with expected results (benchmark mode).",
+    },
+    name: {
+      type: "string",
+      description: "Benchmark name (benchmark mode).",
+    },
+    includeExpired: {
+      type: "boolean",
+      description: "Include expired memories in search/benchmark.",
     },
   },
   required: ["mode"],
@@ -192,6 +214,36 @@ async function runMemoryMode(args, { storage, memoryConfig, activeProject }) {
       utilityScore: calculateMemoryUtilityScore(m),
       ttlDays: getTtlDaysForMemory(m, memoryConfig),
     }));
+  }
+
+  if (mode === "benchmark") {
+    const { runBenchmark, getBenchmarks } = await import("./perf.js");
+    if (args.queries && Array.isArray(args.queries)) {
+      const effectiveScope = projectScope || (args.scope || "default");
+      const filters = { scope: effectiveScope };
+      if (args.includeExpired !== undefined) filters.includeExpired = args.includeExpired;
+      const result = await runBenchmark(
+        args.name || "manual-benchmark",
+        args.queries,
+        async (query) => await storage.searchMemories(query, filters),
+        filters,
+      );
+      return result;
+    }
+    return getBenchmarks();
+  }
+
+  if (mode === "access-stats") {
+    const { getAccessStats } = await import("./tracking.js");
+    return getAccessStats();
+  }
+
+  if (mode === "clear-tracking") {
+    const { clearTracking } = await import("./tracking.js");
+    const { clearBenchmarkData } = await import("./perf.js");
+    await clearTracking();
+    await clearBenchmarkData();
+    return { cleared: true };
   }
 
   throw new Error(`Unknown memory mode: ${mode}`);
